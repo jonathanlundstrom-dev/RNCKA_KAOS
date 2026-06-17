@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NCRAM Pipeline</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --navy:#0B2545; --gold:#C7A24B; --ink:#1a2432; --muted:#6b7686;
+      --line:#e4e8ee; --bg:#f4f6f9; --card:#ffffff; --radius:14px; --red:#D64545;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:"DM Sans",system-ui,sans-serif; color:var(--ink);
+           background:var(--bg); -webkit-font-smoothing:antialiased; }
+
+    .topbar { position:sticky; top:0; z-index:20; background:#fff; border-bottom:1px solid var(--line);
+              display:flex; align-items:center; justify-content:space-between; padding:14px 18px; }
+    .brand { font-size:0.95rem; font-weight:700; letter-spacing:0.06em; color:var(--navy); }
+    .role-pill { font-size:0.64rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
+                 padding:4px 9px; border-radius:999px; }
+    .role-pill.mgr { background:var(--gold); color:#2a2008; }
+    .role-pill.rep { background:#eef1f6; color:var(--navy); }
+
+    /* Bottom navigation */
+    .bottomnav { position:fixed; left:0; right:0; bottom:0; z-index:30; background:#fff;
+                 border-top:1px solid var(--line); display:flex; justify-content:space-around;
+                 padding:8px 6px calc(8px + env(safe-area-inset-bottom));
+                 box-shadow:0 -2px 12px rgba(11,37,69,0.05); }
+    .navitem { background:none; border:none; cursor:pointer; font-family:inherit; flex:1;
+               display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted); padding:4px 6px; }
+    .navitem.active { color:var(--navy); }
+    .navicon svg { width:23px; height:23px; display:block; }
+    .navlabel { font-size:0.6rem; font-weight:600; }
+
+    /* Landing / profile */
+    .profile-cover { height:96px; border-radius:var(--radius) var(--radius) 0 0;
+                     background:linear-gradient(135deg, var(--navy), #1d4e86); }
+    .profile-card { background:#fff; border:1px solid var(--line); border-top:none;
+                    border-radius:0 0 var(--radius) var(--radius); padding:0 18px 20px;
+                    text-align:center; margin-bottom:18px; }
+    .avatar-wrap { margin-top:-44px; display:inline-block; position:relative; }
+    .avatar { width:88px; height:88px; border-radius:50%; border:4px solid #fff; cursor:pointer;
+              background:var(--navy); color:#fff; display:flex; align-items:center; justify-content:center;
+              font-size:1.7rem; font-weight:600; overflow:hidden; }
+    .avatar img { width:100%; height:100%; object-fit:cover; }
+    .avatar-edit { position:absolute; right:0; bottom:4px; width:28px; height:28px; border-radius:50%;
+                   background:var(--gold); color:#2a2008; border:2px solid #fff; cursor:pointer;
+                   display:flex; align-items:center; justify-content:center; }
+    .profile-name { margin:10px 0 2px; font-size:1.3rem; font-weight:700; }
+    .profile-role { font-size:0.85rem; color:var(--muted); }
+    .demo-switch { margin-top:14px; font-size:0.72rem; color:var(--muted); }
+    .demo-switch select { font-family:inherit; font-size:0.8rem; padding:7px 10px; border:1px solid var(--line);
+                          border-radius:9px; background:#fff; color:var(--ink); margin-left:6px; }
+
+    .section-label { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.07em;
+                     color:var(--muted); font-weight:700; margin:6px 2px 10px; }
+    .tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:18px; }
+    .tile { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:16px 8px; text-align:center; }
+    .tile-num { font-family:"DM Mono",monospace; font-size:1.5rem; font-weight:500; color:var(--navy); }
+    .tile-num.alert { color:var(--red); }
+    .tile-lbl { font-size:0.64rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); margin-top:5px; }
+    .quick { display:flex; gap:10px; margin-bottom:18px; }
+    .quick .btn { flex:1; }
+    .rings { display:flex; gap:10px; justify-content:space-around; background:#fff;
+             border:1px solid var(--line); border-radius:var(--radius); padding:18px 10px; margin-bottom:8px; }
+    .ring { text-align:center; }
+    .ring svg { width:84px; height:84px; }
+    .ring-pct { font-family:"DM Mono",monospace; font-size:0.95rem; font-weight:500; fill:var(--ink); }
+    .ring-label { font-size:0.72rem; color:var(--muted); margin-top:4px; }
+
+    .wrap { padding:16px 16px 92px; max-width:1100px; margin:0 auto; }
+    .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+    .toolbar-title { margin:0; font-size:1rem; font-weight:600; }
+
+    /* Search + filters */
+    .search { width:100%; font-family:inherit; font-size:0.95rem; padding:11px 12px;
+              border:1px solid var(--line); border-radius:10px; background:#fff; margin-bottom:10px; }
+    .filters { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+    .filt { font-family:inherit; font-size:0.82rem; padding:8px 10px; border:1px solid var(--line);
+            border-radius:9px; background:#fff; color:var(--ink); }
+    .count { font-size:0.76rem; color:var(--muted); margin:0 0 10px; }
+
+    .list { display:grid; grid-template-columns:1fr; gap:12px; }
+    @media (min-width:720px) { .list { grid-template-columns:1fr 1fr; } }
+
+    .btn { font-family:inherit; font-size:0.85rem; font-weight:600; border-radius:10px;
+           padding:10px 16px; border:1px solid transparent; cursor:pointer; }
+    .btn-primary { background:var(--navy); color:#fff; }
+    .btn-ghost { background:#fff; color:var(--navy); border-color:var(--line); }
+    .btn-danger { background:#fff; color:#b3322a; border-color:#e6c4c4; }
+
+    .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+            padding:16px; cursor:pointer; transition:box-shadow .15s, transform .15s; }
+    .card:hover { box-shadow:0 4px 14px rgba(11,37,69,0.08); transform:translateY(-1px); }
+    .card.lost { opacity:0.62; }
+    .card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+    .card-name { margin:0; font-size:1.02rem; font-weight:600; letter-spacing:-0.01em; }
+    .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+    .chip { font-size:0.72rem; font-weight:500; padding:3px 9px; border-radius:999px;
+            background:#eef1f6; color:var(--muted); }
+    .chip.fmc { background:#f3eede; color:#8a6d1f; }
+    .chip.lost { background:#f0d9d9; color:#9b2c2c; font-weight:700; }
+    .owner { font-family:"DM Sans",sans-serif; font-size:0.76rem; font-weight:500; color:var(--muted);
+             white-space:nowrap; text-align:right; line-height:1.4; }
+
+    .stage { margin-top:14px; }
+    .stage-label { display:flex; align-items:center; gap:7px; font-size:0.78rem;
+                   font-weight:600; color:var(--ink); margin-bottom:6px; }
+    .dot { width:9px; height:9px; border-radius:50%; flex:none; }
+    .stage-bar { display:flex; gap:4px; }
+    .seg { flex:1; height:6px; border-radius:3px; background:var(--line); }
+    .nextstep { margin-top:12px; font-size:0.78rem; color:var(--navy); font-weight:500; }
+    .nextstep.overdue { color:var(--red); font-weight:600; }
+
+    .back { background:none; border:none; color:var(--navy); font-family:inherit;
+            font-size:0.85rem; font-weight:600; cursor:pointer; padding:0; margin-bottom:14px; }
+    .detail-name { margin:0 0 4px; font-size:1.3rem; font-weight:700; }
+    .next-callout { margin-top:12px; padding:11px 14px; border-radius:10px; background:#eef3fb;
+                    color:var(--navy); font-size:0.85rem; }
+    .next-callout.overdue { background:#fdecec; color:var(--red); }
+    .detail-rows { background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+                   margin-top:14px; overflow:hidden; }
+    .row { display:flex; justify-content:space-between; gap:12px; padding:13px 16px;
+           border-bottom:1px solid var(--line); font-size:0.9rem; }
+    .row:last-child { border-bottom:none; }
+    .row .k { color:var(--muted); }
+    .row .v { font-weight:600; text-align:right; }
+    .ownership-note { margin-top:14px; font-size:0.82rem; color:var(--muted); }
+
+    /* Activity log */
+    .note-add { display:flex; gap:8px; margin-top:10px; }
+    .note-add input { flex:1; font-family:inherit; font-size:0.9rem; padding:10px 12px;
+                      border:1px solid var(--line); border-radius:10px; }
+    .activity { margin-top:12px; }
+    .act { display:flex; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); font-size:0.88rem; }
+    .act:last-child { border-bottom:none; }
+    .act-date { font-family:"DM Mono",monospace; font-size:0.74rem; color:var(--muted); white-space:nowrap; flex:none; }
+
+    .team-region { background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+                   margin-bottom:12px; overflow:hidden; }
+    .region-head { background:var(--navy); color:#fff; font-size:0.72rem; text-transform:uppercase;
+                   letter-spacing:0.07em; font-weight:700; padding:9px 16px; }
+    .rep-row { display:flex; justify-content:space-between; align-items:center; padding:13px 16px;
+               border-bottom:1px solid var(--line); font-size:0.9rem; }
+    .rep-row:last-child { border-bottom:none; }
+    .rep-name { font-weight:600; }
+    .rep-stats { font-family:"DM Mono",monospace; font-size:0.76rem; color:var(--muted); }
+
+    .field { margin-bottom:14px; }
+    .field label { display:block; font-size:0.78rem; font-weight:600; color:var(--ink); margin-bottom:5px; }
+    .field input, .field select {
+      width:100%; font-family:inherit; font-size:0.95rem; padding:11px 12px;
+      border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); }
+    .form-section { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.07em;
+                    color:var(--muted); font-weight:700; margin:22px 0 10px;
+                    padding-bottom:6px; border-bottom:1px solid var(--line); }
+    .form-section:first-of-type { margin-top:6px; }
+    .grid-2 { display:grid; grid-template-columns:2fr 1fr; gap:10px; }
+    .form-actions { display:flex; gap:10px; margin-top:20px; }
+    .form-msg { color:var(--red); font-size:0.82rem; margin-bottom:10px; min-height:1em; }
+    .danger-row { margin-top:24px; padding-top:16px; border-top:1px solid var(--line); }
+
+    .photo-grid { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .photo-thumb { position:relative; width:90px; height:90px; border-radius:10px;
+                   overflow:hidden; border:1px solid var(--line); }
+    .photo-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+    .photo-del { position:absolute; top:3px; right:3px; width:20px; height:20px; border:none;
+                 border-radius:50%; background:rgba(0,0,0,0.55); color:#fff; font-size:14px;
+                 line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .card-photos { display:flex; gap:5px; margin-top:12px; }
+    .card-photos img { width:40px; height:40px; border-radius:6px; object-fit:cover; border:1px solid var(--line); }
+    .card-photos .more { width:40px; height:40px; border-radius:6px; background:#eef1f6; color:var(--muted);
+                         font-size:0.7rem; font-family:"DM Mono",monospace;
+                         display:flex; align-items:center; justify-content:center; }
+    .wins-summary { display:flex; gap:12px; margin-bottom:6px; }
+    .ws-stat { flex:1; background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+               padding:16px; text-align:center; }
+    .ws-num { font-family:"DM Mono",monospace; font-size:1.6rem; font-weight:500; color:#2E8B57; }
+    .ws-lbl { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-top:4px; }
+    .alert-banner { margin:0 0 12px; padding:10px 14px; border-radius:10px; background:#fdebcf;
+                    color:#8a5a12; font-size:0.82rem; font-weight:600; cursor:pointer; }
+    .alert-banner.active { background:var(--navy); color:#fff; }
+    .alert-banner.static { cursor:default; }
+    .chip.stale { background:#fde9c8; color:#8a5a12; font-weight:700; }
+    .hidden { display:none; }
+    /* Login screen */
+    .login-wrap { min-height:60vh; display:flex; align-items:center; justify-content:center; padding:24px 0; }
+    .login-card { width:100%; max-width:340px; background:#fff; border:1px solid var(--line);
+                  border-radius:16px; padding:28px 24px; box-shadow:0 8px 30px rgba(11,37,69,0.08); }
+    .login-title { font-size:1.4rem; font-weight:800; color:var(--navy); letter-spacing:-0.01em; }
+    .login-sub { font-family:"DM Mono",monospace; font-size:0.7rem; text-transform:uppercase;
+                 letter-spacing:0.12em; color:var(--gold); margin:2px 0 18px; }
+    .login-lbl { display:block; font-size:0.72rem; font-weight:700; color:var(--muted);
+                 text-transform:uppercase; letter-spacing:0.04em; margin:12px 0 6px; }
+    .login-input { width:100%; box-sizing:border-box; padding:11px 12px; border:1px solid var(--line);
+                   border-radius:10px; font-size:0.95rem; font-family:inherit; color:var(--ink); }
+    .login-input:focus { outline:none; border-color:var(--navy); }
+    .login-btn { width:100%; margin-top:20px; }
+    .login-error { min-height:1.1em; margin-top:12px; font-size:0.82rem; color:var(--red); text-align:center; }
+  </style>
+</head>
+
+<body>
+  <header class="topbar">
+    <span class="brand">NCRAM PIPELINE</span>
+    <span id="role-pill"></span>
+  </header>
+  <main class="wrap"><div id="app"></div></main>
+  <nav class="bottomnav" id="bottomnav"></nav>
+
+  <!-- Supabase client library — loads before our app code so `supabase` exists. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    /* ============================================================ CONFIG */
+    // ---- Supabase connection -------------------------------------------------
+    // Paste these two values from your Supabase dashboard:
+    //   Project Settings → API → "Project URL"  and the  "anon public"  key.
+    // The anon key is safe to ship in the browser — Row-Level Security is what
+    // protects the data, not the secrecy of this key.
+    const SUPABASE_URL      = "https://izbqtdzmfrqnpxxslzlp.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_X6Xvz0GUfHndHsUxOZgfyw_7y2m2h2M";
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness"];
+    const BI_SUBCATEGORIES = ["White Collar", "Blue Collar"];
+    const FMCS = ["Aramark", "Sodexo", "Compass Group", "Other"];
+    const REGIONS = ["West", "Central", "Midwest", "Northeast", "Southeast"];
+    const STAGES = {
+      1:"Customer Knowledge", 2:"Customer Engagement", 3:"Customer Pitch",
+      4:"Field Test & Approval", 5:"Implementation / Account Won",
+    };
+    const STAGE_COLORS = { 1:"#D64545", 2:"#E1833C", 3:"#F0C419", 4:"#7FB85C", 5:"#2E8B57" };
+    const REPS = {
+      rep_aquinet:  { name:"Amy Quinet",      region:"West" },
+      rep_kbraidic: { name:"Kendall Braidic",  region:"West" },
+      rep_knaviaux: { name:"Katie Naviaux",    region:"Central" },
+      rep_sford:    { name:"Sierra Ford",      region:"Central" },
+      rep_mflom:    { name:"Meg Flom",         region:"Midwest" },
+      rep_rwagner:  { name:"Rudy Wagner",      region:"Midwest" },
+      rep_tmcgowan: { name:"TJ Mcgowan",       region:"Midwest" },
+      rep_mrenno:   { name:"Montana Renno",    region:"Northeast" },
+      rep_ctrott:   { name:"Chris Trott",      region:"Northeast" },
+      rep_gdrillock:{ name:"Greg Drillock",    region:"Northeast" },
+      rep_cjenkins: { name:"Carroll Jenkins",  region:"Southeast" },
+      rep_jqueja:   { name:"Josh Queja",       region:"Southeast" },
+    };
+    // Managers have full access: all accounts, the Team view, edit/reassign anything.
+    const MANAGERS = {
+      mgr_jonathan:  { name:"Jonathan Lundstrom", title:"Director" },
+      mgr_dbuccheit: { name:"Dylan Buccheit", title:"Senior Manager" },
+    };
+    function repName(id)   { return REPS[id] ? REPS[id].name   : "Unassigned"; }
+    function repRegion(id) { return REPS[id] ? REPS[id].region : "—"; }
+    // Rep <option>s grouped under region headers — cleaner than "name — region" on every line.
+    function repOptionsGrouped(selectedId) {
+      return REGIONS.map(r => {
+        const opts = Object.keys(REPS).filter(id => REPS[id].region === r)
+          .map(id => '<option value="'+id+'"'+(id===selectedId?' selected':'')+'>'+REPS[id].name+'</option>').join("");
+        return '<optgroup label="'+r+'">'+opts+'</optgroup>';
+      }).join("");
+    }
+    function fmtDate(d)    { return d ? new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : ""; }
+    function todayStr()    { return new Date().toISOString().slice(0,10); }
+    // Escape user-entered text before putting it in HTML (prevents broken markup / injection).
+    function esc(s) { return String(s==null?"":s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    // Staleness: an active, in-progress account with no note or stage change in 2 weeks.
+    const STALE_DAYS = 14;
+    function daysSince(dateStr) {
+      if (!dateStr) return Infinity;
+      return Math.floor((new Date(todayStr()+"T00:00:00") - new Date(dateStr+"T00:00:00")) / 86400000);
+    }
+    function needsUpdate(a) {
+      return a.status === "active" && a.stage < 5 && daysSince(a.lastTouch) >= STALE_DAYS;
+    }
+
+    /* ============================================ CURRENT USER + ACCESS */
+    // Null until a successful login fills it in (see the AUTH section below).
+    let currentUser = null;
+    function isManager()      { return currentUser && currentUser.role === "manager"; }
+    function canEdit(account) { return isManager() || account.ownerId === currentUser.repId; }
+
+    // Profile pictures, keyed by the logged-in user's id (manager or rep).
+    const profilePics = {};
+    function currentUserKey() { return isManager() ? currentUser.managerId : currentUser.repId; }
+    function userInitials(name) { return (name||"").split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
+
+    // Line icons for the bottom navigation.
+    const SVG = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+    const ICONS = {
+      home:     '<svg '+SVG+'><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>',
+      pipeline: '<svg '+SVG+'><path d="M4 5h16l-6 7v5l-4 2v-7z"/></svg>',
+      calls:    '<svg '+SVG+'><path d="M6.6 10.8a13 13 0 006.6 6.6l2.2-2.2a1 1 0 011-.24 11 11 0 003.4.55 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.55 3.4 1 1 0 01-.24 1z"/></svg>',
+      wins:     '<svg '+SVG+'><path d="M8 4h8v5a4 4 0 01-8 0z"/><path d="M8 5H5v1.5a3 3 0 003 2.6M16 5h3v1.5a3 3 0 01-3 2.6"/><path d="M12 13v3M9.5 20h5M10 16h4"/></svg>',
+      team:     '<svg '+SVG+'><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0111 0"/><path d="M16.5 5.2a3.2 3.2 0 010 5.6M20.5 19a5.5 5.5 0 00-4.2-5.3"/></svg>',
+      camera:   '<svg '+SVG+' width="14" height="14"><path d="M5 8h2.5L9 6h6l1.5 2H19v10H5z"/><circle cx="12" cy="13" r="3"/></svg>',
+    };
+
+    /* ============================================================ DATA */
+    let accounts = [
+      { id:"acc_001", accountName:"Pinnacle Financial HQ", segment:"B&I",
+        biSubCategory:"White Collar", fmcManaged:true, fmcName:"Aramark", stage:3,
+        address:"200 Market St", city:"San Francisco", state:"CA", zip:"94105",
+        primaryContact:"Dana Wells", phone:"415-555-0182", email:"dwells@pinnaclefin.com",
+        ownerId:"rep_aquinet" },
+      { id:"acc_002", accountName:"Granite Steel Works", segment:"B&I",
+        biSubCategory:"Blue Collar", fmcManaged:false, fmcName:null, stage:1,
+        address:"1400 Industrial Pkwy", city:"Cleveland", state:"OH", zip:"44114",
+        primaryContact:"Mike Tran", phone:"216-555-0147", email:"m.tran@granitesteel.com",
+        ownerId:"rep_rwagner" },
+      { id:"acc_003", accountName:"Mercy Regional Medical", segment:"Healthcare",
+        biSubCategory:null, fmcManaged:true, fmcName:"Sodexo", stage:2,
+        address:"900 Hospital Dr", city:"Dallas", state:"TX", zip:"75201",
+        primaryContact:"Rosa Lim", phone:"214-555-0199", email:"rlim@mercyregional.org",
+        ownerId:"rep_knaviaux" },
+      { id:"acc_004", accountName:"Lakeshore University Dining", segment:"Collegiate",
+        biSubCategory:null, fmcManaged:false, fmcName:null, stage:4,
+        address:"1 Campus Way", city:"Boston", state:"MA", zip:"02118",
+        primaryContact:"Dean Hale", phone:"617-555-0123", email:"dining@lakeshore.edu",
+        ownerId:"rep_ctrott" },
+      { id:"acc_005", accountName:"Apex Fitness — Southeast", segment:"Fitness",
+        biSubCategory:null, fmcManaged:false, fmcName:null, stage:5,
+        address:"55 Peachtree Rd", city:"Atlanta", state:"GA", zip:"30303",
+        primaryContact:"Kim Foster", phone:"404-555-0166", email:"kfoster@apexfit.com",
+        ownerId:"rep_jqueja" },
+      { id:"acc_006", accountName:"Metro Transit Vending", segment:"Vending",
+        biSubCategory:null, fmcManaged:false, fmcName:null, stage:2,
+        address:"300 Transit Center", city:"Kansas City", state:"MO", zip:"64106",
+        primaryContact:"Leon Park", phone:"816-555-0175", email:"lpark@metrotransit.gov",
+        ownerId:"rep_sford" },
+    ];
+    // Normalize: make sure every account has the newer fields.
+    accounts.forEach(a => {
+      if (!a.photos) a.photos = [];
+      if (a.annualVolume == null) a.annualVolume = 0;
+      if (!a.status) a.status = "active";        // active | lost
+      if (!a.activity) a.activity = [];          // [{id, date, text}]
+      if (a.nextStep == null) a.nextStep = "";
+      if (a.nextStepDate == null) a.nextStepDate = "";
+      if (a.lastTouch == null) a.lastTouch = todayStr();   // last note or stage change
+    });
+
+    /* ====================================================== DATA ACCESS */
+    function getAccounts()        { return accounts; }
+    function getAccount(id)       { return accounts.find(a => a.id === id); }
+    function addAccount(account)  { accounts.push(account); }
+    function updateAccount(id, c) { const a = getAccount(id); if (a) Object.assign(a, c, { updatedAt: new Date().toISOString() }); }
+    function deleteAccount(id)    { accounts = accounts.filter(a => a.id !== id); }
+
+    // Who sees what: manager sees all; a rep sees only their own.
+    function visibleAccounts() {
+      return isManager() ? getAccounts() : getAccounts().filter(a => a.ownerId === currentUser.repId);
+    }
+    // Apply the active search + filter state on top of what the user can see.
+    function filteredAccounts() {
+      const f = state.filters;
+      return visibleAccounts().filter(a => {
+        if (f.stale && !needsUpdate(a)) return false;
+        if (f.status === "active" && a.status === "lost") return false;
+        if (f.status === "lost"   && a.status !== "lost") return false;
+        if (f.search && !a.accountName.toLowerCase().includes(f.search.toLowerCase())) return false;
+        if (f.stage && a.stage !== Number(f.stage)) return false;
+        if (f.segment && a.segment !== f.segment) return false;
+        if (f.region && repRegion(a.ownerId) !== f.region) return false;
+        if (f.owner && a.ownerId !== f.owner) return false;
+        return true;
+      });
+    }
+
+    // Demo seeds so the new features have something to show.
+    Object.assign(getAccount("acc_001"), { stage:5, wonDate:"2026-05-09", annualVolume:9000 });
+    Object.assign(getAccount("acc_005"), { wonDate:"2026-04-18", annualVolume:4200 });
+    getAccount("acc_004").annualVolume = 2500;
+    getAccount("acc_003").annualVolume = 1800;
+    Object.assign(getAccount("acc_006"), { status:"lost", lostReason:"Lost bid to incumbent vendor", lostDate:"2026-05-30" });
+    Object.assign(getAccount("acc_003"), { nextStep:"Send pricing proposal", nextStepDate:"2026-06-20" });
+    Object.assign(getAccount("acc_004"), { nextStep:"Schedule field test", nextStepDate:"2026-06-10" });
+    getAccount("acc_003").activity = [
+      { id:"n1", date:"2026-06-02", text:"Intro call with foodservice director — strong interest." },
+      { id:"n2", date:"2026-06-09", text:"Sent product samples; positive response from the team." },
+    ];
+    // last-touch seeds: acc_002 and acc_004 go stale (>2 weeks), acc_003 stays fresh.
+    getAccount("acc_002").lastTouch = "2026-05-20";
+    getAccount("acc_003").lastTouch = "2026-06-09";
+    getAccount("acc_004").lastTouch = "2026-05-28";
+
+    /* ===================================================== CALL POINTS */
+    // A rep's full book of accounts they service and call on — separate from
+    // the active sales pipeline. No stage; the focus is regular engagement.
+    let callPoints = [
+      { id:"cp_001", name:"Horizon Tech Campus", segment:"B&I", fmcManaged:true, fmcName:"Compass Group",
+        address:"500 Innovation Dr", city:"Austin", state:"TX", zip:"78701",
+        primaryContact:"Beth Crane", phone:"512-555-0144", email:"bcrane@horizontech.com",
+        ownerId:"rep_aquinet" },
+      { id:"cp_002", name:"Northside Medical Center", segment:"Healthcare", fmcManaged:true, fmcName:"Sodexo",
+        address:"77 Wellness Blvd", city:"Columbus", state:"OH", zip:"43215",
+        primaryContact:"Omar Reed", phone:"614-555-0188", email:"oreed@northsidemed.org",
+        ownerId:"rep_rwagner" },
+      { id:"cp_003", name:"Summit College Union", segment:"Collegiate", fmcManaged:false, fmcName:null,
+        address:"12 Quad St", city:"Providence", state:"RI", zip:"02903",
+        primaryContact:"Lena Park", phone:"401-555-0121", email:"dining@summitcollege.edu",
+        ownerId:"rep_ctrott" },
+      { id:"cp_004", name:"Pulse Gym — Midtown", segment:"Fitness", fmcManaged:false, fmcName:null,
+        address:"88 Market Sq", city:"Charlotte", state:"NC", zip:"28202",
+        primaryContact:"Drew Nash", phone:"704-555-0133", email:"drew@pulsegym.com",
+        ownerId:"rep_aquinet" },
+    ];
+    callPoints.forEach(c => {
+      if (!c.photos) c.photos = [];
+      if (!c.calls) c.calls = [];          // logged calls: [{id, date, note}]
+      if (c.lastCall == null) c.lastCall = "";
+    });
+
+    function getCallPoints()       { return callPoints; }
+    function getCallPoint(id)      { return callPoints.find(c => c.id === id); }
+    function addCallPoint(c)       { callPoints.push(c); }
+    function updateCallPoint(id,c) { const x = getCallPoint(id); if (x) Object.assign(x, c); }
+    function deleteCallPoint(id)   { callPoints = callPoints.filter(c => c.id !== id); }
+    function visibleCallPoints()   { return isManager() ? getCallPoints() : getCallPoints().filter(c => c.ownerId === currentUser.repId); }
+
+    const CALL_STALE_DAYS = 28;            // 4 weeks
+    function needsCall(c) { return daysSince(c.lastCall) >= CALL_STALE_DAYS; }
+
+    // Demo last-call dates: three stale (>4 weeks), one fresh.
+    getCallPoint("cp_001").lastCall = "2026-05-01";
+    getCallPoint("cp_002").lastCall = "2026-05-02";
+    getCallPoint("cp_003").lastCall = "2026-05-10";
+    getCallPoint("cp_004").lastCall = "2026-06-10";
+    getCallPoint("cp_001").calls = [ { id:"c1", date:"2026-05-01", note:"Quarterly check-in; reordered product." } ];
+
+    /* =========================================================== STATE */
+    const DEFAULT_FILTERS = { search:"", stage:"", segment:"", region:"", owner:"", status:"active", stale:false };
+    const state = { view:"home", selectedId:null, editingId:null, filters:{ ...DEFAULT_FILTERS },
+                    cpId:null, cpEditId:null, cpSearch:"", cpStale:false,
+                    cpSegment:"", cpRegion:"", cpOwner:"" };
+
+    /* =========================================================== VIEWS */
+    function ring(pct, label, color) {
+      pct = Math.max(0, Math.min(100, Math.round(pct)));
+      const r = 32, c = 2*Math.PI*r, off = c*(1 - pct/100);
+      return '<div class="ring"><svg viewBox="0 0 84 84">'
+        + '<circle cx="42" cy="42" r="'+r+'" stroke="#eef1f6" stroke-width="8" fill="none"/>'
+        + '<circle cx="42" cy="42" r="'+r+'" stroke="'+color+'" stroke-width="8" fill="none" stroke-linecap="round" '
+        +   'stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 42 42)"/>'
+        + '<text x="42" y="47" text-anchor="middle" class="ring-pct">'+pct+'%</text>'
+        + '</svg><div class="ring-label">'+label+'</div></div>';
+    }
+
+    function landingView() {
+      const key = currentUserKey();
+      const pic = profilePics[key];
+      const inner = pic ? '<img src="'+pic+'" alt="profile" />' : userInitials(currentUser.name);
+      const roleLabel = isManager()
+        ? (currentUser.title || "Manager")
+        : "NCRAM · "+(currentUser.region || "—");
+
+      const accts = visibleAccounts();
+      const active = accts.filter(a => a.status !== "lost" && a.stage < 5).length;
+      const wins = accts.filter(a => a.stage === 5 && a.status !== "lost").length;
+      const lost = accts.filter(a => a.status === "lost").length;
+      const cps = visibleCallPoints();
+      const callsDue = cps.filter(needsCall).length;
+      const closed = wins + active + lost;
+      const winRate = closed ? (wins / closed * 100) : 0;
+      const callCoverage = cps.length ? ((cps.length - callsDue) / cps.length * 100) : 100;
+
+      return ''
+        + '<div class="profile-cover"></div>'
+        + '<div class="profile-card">'
+        +   '<div class="avatar-wrap">'
+        +     '<div class="avatar" data-action="avatar-edit">'+inner+'</div>'
+        +     '<button class="avatar-edit" data-action="avatar-edit" title="Upload photo">'+ICONS.camera+'</button>'
+        +     '<input type="file" id="avatar-input" accept="image/*" style="display:none" />'
+        +   '</div>'
+        +   '<div class="profile-name">'+esc(currentUser.name)+'</div>'
+        +   '<div class="profile-role">'+roleLabel+'</div>'
+        +   '<div class="demo-switch"><button class="btn btn-ghost btn-logout" data-action="logout">Sign out</button></div>'
+        + '</div>'
+        + '<div class="section-label">Snapshot</div>'
+        + '<div class="tiles">'
+        +   '<div class="tile"><div class="tile-num">'+active+'</div><div class="tile-lbl">Active</div></div>'
+        +   '<div class="tile"><div class="tile-num">'+wins+'</div><div class="tile-lbl">Wins</div></div>'
+        +   '<div class="tile"><div class="tile-num'+(callsDue?' alert':'')+'">'+callsDue+'</div><div class="tile-lbl">Calls Due</div></div>'
+        + '</div>'
+        + '<div class="section-label">Quick actions</div>'
+        + '<div class="quick">'
+        +   '<button class="btn btn-ghost" data-action="add">+ New account</button>'
+        +   '<button class="btn btn-ghost" data-action="cp-add">+ New call point</button>'
+        + '</div>'
+        + '<div class="section-label">Performance</div>'
+        + '<div class="rings">'+ring(winRate, "Win rate", "#2E8B57")+ring(callCoverage, "Call coverage", "#0B2545")+'</div>';
+    }
+
+    function accountCard(a) {
+      const lost = a.status === "lost";
+      const color = STAGE_COLORS[a.stage];
+      let segs = "";
+      for (let i = 1; i <= 5; i++) {
+        const bg = i <= a.stage ? STAGE_COLORS[i] : "var(--line)";
+        segs += '<div class="seg" style="background:' + bg + '"></div>';
+      }
+      const lostChip = lost ? '<span class="chip lost">Lost</span>' : "";
+      const staleChip = needsUpdate(a) ? '<span class="chip stale">Needs updating</span>' : "";
+      const subCat = a.biSubCategory ? '<span class="chip">'+a.biSubCategory+'</span>' : "";
+      const fmc = a.fmcManaged ? '<span class="chip fmc">'+esc(a.fmcName)+'</span>' : '<span class="chip">Self-op</span>';
+      const photoStrip = (a.photos && a.photos.length)
+        ? '<div class="card-photos">' + a.photos.slice(0,4).map(p => '<img src="'+p.url+'" alt="" />').join("")
+          + (a.photos.length > 4 ? '<div class="more">+'+(a.photos.length-4)+'</div>' : '') + '</div>'
+        : "";
+      let nextLine = "";
+      if (!lost && (a.nextStep || a.nextStepDate)) {
+        const overdue = a.nextStepDate && a.nextStepDate < todayStr();
+        nextLine = '<div class="nextstep'+(overdue?' overdue':'')+'">Next: '
+          + esc(a.nextStep || "—")
+          + (a.nextStepDate ? ' · '+fmtDate(a.nextStepDate)+(overdue?' (overdue)':'') : '') + '</div>';
+      }
+      return ''
+        + '<article class="card'+(lost?' lost':'')+'" data-action="open" data-id="'+a.id+'">'
+        +   '<div class="card-top"><h2 class="card-name">'+esc(a.accountName)+'</h2>'
+        +     '<span class="owner">'+repName(a.ownerId)+'<br>'+repRegion(a.ownerId)+'</span></div>'
+        +   '<div class="chips">'+staleChip+lostChip+'<span class="chip">'+a.segment+'</span>'+subCat+fmc+'</div>'
+        +   '<div class="stage"><div class="stage-label"><span class="dot" style="background:'+color+'"></span>'
+        +     'Stage '+a.stage+' · '+STAGES[a.stage]+'</div><div class="stage-bar">'+segs+'</div></div>'
+        +   nextLine + photoStrip
+        + '</article>';
+    }
+
+    function listView() {
+      const f = state.filters;
+      const title = isManager() ? "Pipeline — all reps" : "My accounts";
+      const stageOpts = '<option value="">All stages</option>' + Object.keys(STAGES).map(n =>
+        '<option value="'+n+'"'+(f.stage===n?' selected':'')+'>Stage '+n+'</option>').join("");
+      const segOpts = '<option value="">All segments</option>' + SEGMENTS.map(s =>
+        '<option value="'+s+'"'+(f.segment===s?' selected':'')+'>'+s+'</option>').join("");
+      const statusLabels = { active:"Active", lost:"Lost", all:"All status" };
+      const statusOpts = ["active","lost","all"].map(s =>
+        '<option value="'+s+'"'+(f.status===s?' selected':'')+'>'+statusLabels[s]+'</option>').join("");
+      let mgrFilters = "";
+      if (isManager()) {
+        const regionOpts = '<option value="">All regions</option>' + REGIONS.map(r =>
+          '<option value="'+r+'"'+(f.region===r?' selected':'')+'>'+r+'</option>').join("");
+        const ownerOpts = '<option value="">All reps</option>' + Object.keys(REPS).map(id =>
+          '<option value="'+id+'"'+(f.owner===id?' selected':'')+'>'+REPS[id].name+'</option>').join("");
+        mgrFilters = '<select id="flt-region" class="filt">'+regionOpts+'</select>'
+                   + '<select id="flt-owner" class="filt">'+ownerOpts+'</select>';
+      }
+      return ''
+        + '<div class="toolbar"><h2 class="toolbar-title">'+title+'</h2>'
+        +   '<button class="btn btn-primary" data-action="add">+ Add account</button></div>'
+        + '<input id="flt-search" class="search" type="search" placeholder="Search accounts by name…" value="'+esc(f.search)+'" />'
+        + '<div class="filters">'
+        +   '<select id="flt-stage" class="filt">'+stageOpts+'</select>'
+        +   '<select id="flt-segment" class="filt">'+segOpts+'</select>'
+        +   mgrFilters
+        +   '<select id="flt-status" class="filt">'+statusOpts+'</select>'
+        + '</div>'
+        + '<div id="results"></div>';
+    }
+
+    // Only the results list re-renders on search/filter, so the search box keeps focus.
+    function renderResults() {
+      const el = document.getElementById("results");
+      if (!el) return;
+      const data = filteredAccounts();
+      const total = visibleAccounts().length;
+      const staleCount = visibleAccounts().filter(needsUpdate).length;
+      let banner = "";
+      if (state.filters.stale)
+        banner = '<div class="alert-banner active" data-action="toggle-stale">Showing accounts that need updating — tap to clear</div>';
+      else if (staleCount > 0)
+        banner = '<div class="alert-banner" data-action="toggle-stale">'+staleCount+' account'+(staleCount>1?'s':'')+' need updating — no note or stage change in 2 weeks</div>';
+      const cards = data.length
+        ? data.map(accountCard).join("")
+        : '<p style="color:var(--muted)">No accounts match these filters.</p>';
+      el.innerHTML = banner + '<p class="count">Showing '+data.length+' of '+total+'</p><div class="list">'+cards+'</div>';
+    }
+
+    function teamView() {
+      let html = '<h2 class="toolbar-title" style="margin-bottom:14px">Team — all regions</h2>';
+      REGIONS.forEach(region => {
+        const ids = Object.keys(REPS).filter(id => REPS[id].region === region);
+        html += '<div class="team-region"><div class="region-head">'+region+'</div>';
+        ids.forEach(id => {
+          const owned = getAccounts().filter(a => a.ownerId === id && a.status !== "lost");
+          const won = owned.filter(a => a.stage === 5).length;
+          html += '<div class="rep-row"><span class="rep-name">'+REPS[id].name+'</span>'
+                + '<span class="rep-stats">'+owned.length+' active · '+won+' won</span></div>';
+        });
+        html += '</div>';
+      });
+      return html;
+    }
+
+    function winsView() {
+      const wins = visibleAccounts().filter(a => a.stage === 5 && a.status !== "lost");
+      const totalVol = wins.reduce((s,a) => s + (a.annualVolume || 0), 0);
+      const summary = '<div class="wins-summary">'
+        + '<div class="ws-stat"><div class="ws-num">'+wins.length+'</div><div class="ws-lbl">Wins</div></div>'
+        + '<div class="ws-stat"><div class="ws-num">'+totalVol.toLocaleString()+'</div><div class="ws-lbl">Cases / yr</div></div>'
+        + '</div>';
+      let regionBlock = "";
+      if (isManager()) {
+        const byRegion = REGIONS.map(r => {
+          const rw = wins.filter(a => repRegion(a.ownerId) === r);
+          return { r, n:rw.length, vol: rw.reduce((s,a)=>s+(a.annualVolume||0),0) };
+        }).filter(x => x.n > 0);
+        if (byRegion.length)
+          regionBlock = '<div class="form-section">By region</div><div class="detail-rows">'
+            + byRegion.map(x => '<div class="row"><span class="k">'+x.r+'</span>'
+                + '<span class="v">'+x.n+' won · '+x.vol.toLocaleString()+' cases</span></div>').join("")
+            + '</div>';
+      }
+      const items = wins.length
+        ? wins.map(a => '<article class="card" data-action="open" data-id="'+a.id+'">'
+            + '<div class="card-top"><h2 class="card-name">'+esc(a.accountName)+'</h2>'
+            + '<span class="owner">'+repName(a.ownerId)+'<br>'+repRegion(a.ownerId)+'</span></div>'
+            + '<div class="chips"><span class="chip">'+a.segment+'</span>'
+            + (a.wonDate ? '<span class="chip">Won '+fmtDate(a.wonDate)+'</span>' : '')
+            + (a.annualVolume ? '<span class="chip">'+a.annualVolume.toLocaleString()+' cases/yr</span>' : '')
+            + '</div></article>').join("")
+        : '<p style="color:var(--muted)">No wins yet. Accounts land here when they reach stage 5.</p>';
+      const title = isManager() ? "Wins — all reps" : "My wins";
+      return '<h2 class="toolbar-title" style="margin-bottom:14px">'+title+'</h2>'
+        + summary + regionBlock + '<div class="list" style="margin-top:14px">'+items+'</div>';
+    }
+
+    function detailView() {
+      const a = getAccount(state.selectedId);
+      if (!a) return '<p>Account not found.</p>';
+      const color = STAGE_COLORS[a.stage];
+      const editable = canEdit(a);
+      const lost = a.status === "lost";
+      const staleNote = needsUpdate(a)
+        ? '<div class="alert-banner static">Needs updating — '+daysSince(a.lastTouch)+' days since the last note or stage change.</div>'
+        : "";
+      const row = (k, v) => v ? '<div class="row"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>' : "";
+      const addressLine = a.address ? esc(a.address+', '+a.city+', '+a.state+' '+a.zip) : "";
+
+      // Next-step callout
+      let nextBlock = "";
+      if (!lost && (a.nextStep || a.nextStepDate)) {
+        const overdue = a.nextStepDate && a.nextStepDate < todayStr();
+        nextBlock = '<div class="next-callout'+(overdue?' overdue':'')+'"><strong>Next step:</strong> '
+          + esc(a.nextStep || "—")
+          + (a.nextStepDate ? ' · due '+fmtDate(a.nextStepDate)+(overdue?' (overdue)':'') : '') + '</div>';
+      }
+
+      // Activity log
+      const activityList = a.activity.length
+        ? '<div class="activity">' + a.activity.slice().reverse().map(n =>
+            '<div class="act"><span class="act-date">'+fmtDate(n.date)+'</span><span>'+esc(n.text)+'</span></div>').join("") + '</div>'
+        : '<p style="color:var(--muted);font-size:0.85rem;margin-top:8px">No activity logged yet.</p>';
+      const noteAdd = editable
+        ? '<div class="note-add"><input id="note-input" type="text" placeholder="Log a touchpoint…" />'
+          + '<button class="btn btn-ghost" data-action="add-note" data-id="'+a.id+'">Add</button></div>'
+        : "";
+
+      // Photos
+      const thumbs = a.photos.length
+        ? '<div class="photo-grid">' + a.photos.map(p =>
+            '<div class="photo-thumb"><img src="'+p.url+'" alt="account photo" />'
+            + (editable ? '<button class="photo-del" data-action="del-photo" data-id="'+a.id+'" data-photo="'+p.id+'">×</button>' : '')
+            + '</div>').join("") + '</div>'
+        : '<p style="color:var(--muted);font-size:0.85rem;margin-top:8px">No photos yet.</p>';
+      const addPhoto = editable
+        ? '<input type="file" id="photo-input" accept="image/*" multiple style="display:none" />'
+          + '<div class="form-actions"><button class="btn btn-ghost" data-action="add-photo">+ Add photo</button></div>'
+        : "";
+
+      const editBtn = editable
+        ? '<div class="form-actions"><button class="btn btn-primary" data-action="edit">Edit account</button></div>' : "";
+      const note = editable
+        ? (isManager() ? "Manager access — you can edit this account or reassign its owner." : "You own this account, so you can edit it.")
+        : "Owned by "+repName(a.ownerId)+" ("+repRegion(a.ownerId)+"). View only — only the owner can edit.";
+
+      return ''
+        + '<button class="back" data-action="back">‹ Back to pipeline</button>'
+        + '<h2 class="detail-name">'+esc(a.accountName)+'</h2>'
+        + '<div class="stage-label"><span class="dot" style="background:'+color+'"></span>'
+        +   'Stage '+a.stage+' · '+STAGES[a.stage]+(lost?'  —  <span style="color:var(--red)">Lost</span>':'')+'</div>'
+        + staleNote
+        + nextBlock
+        + '<div class="detail-rows">'
+        +   row("Segment", a.segment) + row("B&I sub-category", a.biSubCategory)
+        +   row("FMC managed", a.fmcManaged ? "Yes" : "No") + row("FMC", esc(a.fmcName))
+        +   row("Owner", repName(a.ownerId)) + row("Region", repRegion(a.ownerId))
+        +   row("Annual volume", a.annualVolume ? a.annualVolume.toLocaleString()+" cases" : "")
+        +   (a.stage===5 && a.wonDate ? row("Date won", fmtDate(a.wonDate)) : "")
+        +   (lost ? row("Lost reason", esc(a.lostReason)) : "")
+        +   (lost && a.lostDate ? row("Date lost", fmtDate(a.lostDate)) : "")
+        +   row("Address", addressLine) + row("Primary contact", esc(a.primaryContact))
+        +   row("Phone", esc(a.phone)) + row("Email", esc(a.email))
+        + '</div>'
+        + editBtn
+        + '<div class="form-section">Activity</div>' + noteAdd + activityList
+        + '<div class="form-section">Photos ('+a.photos.length+')</div>' + thumbs + addPhoto
+        + '<p class="ownership-note">'+note+'</p>';
+    }
+
+    function formView(account) {
+      const g = k => (account && account[k] != null) ? account[k] : "";
+      const optList = (list, cur) => list.map(x => '<option value="'+x+'"'+(x===cur?' selected':'')+'>'+x+'</option>').join("");
+      const isEdit   = !!account;
+      const curStage = account ? String(account.stage) : "1";
+      const curFmc   = account ? (account.fmcManaged ? "yes" : "no") : "";
+      const curOwner = account ? account.ownerId : Object.keys(REPS)[0];
+      const curStatus= account ? account.status : "active";
+
+      const segOpts   = '<option value="">— Select —</option>' + optList(SEGMENTS, g("segment"));
+      const subOpts   = '<option value="">— Select —</option>' + optList(BI_SUBCATEGORIES, g("biSubCategory"));
+      const fmcOpts   = '<option value="">— Select —</option>' + optList(FMCS, g("fmcName"));
+      const stageOpts = Object.keys(STAGES).map(n =>
+        '<option value="'+n+'"'+(n===curStage?' selected':'')+'>Stage '+n+' · '+STAGES[n]+'</option>').join("");
+      const ownerOpts = repOptionsGrouped(curOwner);
+
+      const subHidden  = (account && account.segment === "B&I") ? "" : " hidden";
+      const fmcHidden  = (account && account.fmcManaged) ? "" : " hidden";
+      const lostHidden = (curStatus === "lost") ? "" : " hidden";
+      const ownerField = isManager()
+        ? '<div class="field"><label>Owner (assign)</label><select id="f-owner">'+ownerOpts+'</select></div>' : "";
+      const deleteRow = isEdit
+        ? '<div class="danger-row"><button class="btn btn-danger" data-action="delete">Delete account</button></div>' : "";
+
+      return ''
+        + '<button class="back" data-action="cancel-form">‹ Cancel</button>'
+        + '<h2 class="detail-name">'+(isEdit?'Edit account':'New account')+'</h2>'
+        + '<div class="form-msg" id="form-msg"></div>'
+        + '<div class="form-section">Account</div>'
+        + '<div class="field"><label>Account name</label>'
+        +   '<input id="f-name" type="text" value="'+esc(g("accountName"))+'" placeholder="e.g. Summit Logistics HQ" /></div>'
+        + ownerField
+        + '<div class="field"><label>Segment</label><select id="f-segment">'+segOpts+'</select></div>'
+        + '<div class="field'+subHidden+'" id="field-subcat"><label>B&I sub-category</label><select id="f-subcat">'+subOpts+'</select></div>'
+        + '<div class="field"><label>FMC managed?</label><select id="f-fmc">'
+        +   '<option value="">— Select —</option>'
+        +   '<option value="yes"'+(curFmc==="yes"?" selected":"")+'>Yes</option>'
+        +   '<option value="no"'+(curFmc==="no"?" selected":"")+'>No</option></select></div>'
+        + '<div class="field'+fmcHidden+'" id="field-fmcname"><label>FMC</label><select id="f-fmcname">'+fmcOpts+'</select></div>'
+        + '<div class="field"><label>Stage</label><select id="f-stage">'+stageOpts+'</select></div>'
+        + '<div class="field"><label>Annual volume (cases)</label>'
+        +   '<input id="f-volume" type="number" min="0" value="'+(g("annualVolume")||0)+'" /></div>'
+        + '<div class="field"><label>Pipeline status</label><select id="f-status">'
+        +   '<option value="active"'+(curStatus==="active"?" selected":"")+'>Active</option>'
+        +   '<option value="lost"'+(curStatus==="lost"?" selected":"")+'>Lost</option></select></div>'
+        + '<div class="field'+lostHidden+'" id="field-lostreason"><label>Reason lost</label>'
+        +   '<input id="f-lostreason" type="text" value="'+esc(g("lostReason"))+'" placeholder="Why did this deal die?" /></div>'
+        + '<div class="form-section">Next step</div>'
+        + '<div class="field"><label>What\'s next</label>'
+        +   '<input id="f-nextstep" type="text" value="'+esc(g("nextStep"))+'" placeholder="e.g. Send pricing proposal" /></div>'
+        + '<div class="field"><label>Follow-up date</label>'
+        +   '<input id="f-nextdate" type="date" value="'+g("nextStepDate")+'" /></div>'
+        + '<div class="form-section">Location</div>'
+        + '<div class="field"><label>Address</label><input id="f-address" type="text" value="'+esc(g("address"))+'" /></div>'
+        + '<div class="field"><label>City</label><input id="f-city" type="text" value="'+esc(g("city"))+'" /></div>'
+        + '<div class="grid-2">'
+        +   '<div class="field"><label>State</label><input id="f-state" type="text" value="'+esc(g("state"))+'" placeholder="NC" /></div>'
+        +   '<div class="field"><label>Zip</label><input id="f-zip" type="text" value="'+esc(g("zip"))+'" /></div>'
+        + '</div>'
+        + '<div class="form-section">Primary contact</div>'
+        + '<div class="field"><label>Contact name</label><input id="f-contact" type="text" value="'+esc(g("primaryContact"))+'" /></div>'
+        + '<div class="field"><label>Phone</label><input id="f-phone" type="tel" value="'+esc(g("phone"))+'" /></div>'
+        + '<div class="field"><label>Email</label><input id="f-email" type="email" value="'+esc(g("email"))+'" /></div>'
+        + '<div class="form-actions">'
+        +   '<button class="btn btn-primary" data-action="save">'+(isEdit?'Save changes':'Save account')+'</button>'
+        +   '<button class="btn btn-ghost" data-action="cancel-form">Cancel</button>'
+        + '</div>'
+        + deleteRow;
+    }
+
+    /* ========================================================= ACTIONS */
+    function saveForm() {
+      const v = id => document.getElementById(id).value;
+      const name = v("f-name").trim();
+      const segment = v("f-segment");
+      if (!name || !segment) {
+        document.getElementById("form-msg").textContent = "Account name and segment are required.";
+        return;
+      }
+      const fmcManaged = v("f-fmc") === "yes";
+      const status = v("f-status") || "active";
+      const existing = state.editingId ? getAccount(state.editingId) : null;
+
+      const data = {
+        accountName: name, segment,
+        biSubCategory: segment === "B&I" ? (v("f-subcat") || null) : null,
+        fmcManaged, fmcName: fmcManaged ? (v("f-fmcname") || null) : null,
+        stage: Number(v("f-stage")) || 1,
+        annualVolume: Number(v("f-volume")) || 0,
+        status,
+        nextStep: v("f-nextstep").trim(),
+        nextStepDate: v("f-nextdate"),
+        address:v("f-address").trim(), city:v("f-city").trim(),
+        state:v("f-state").trim(), zip:v("f-zip").trim(),
+        primaryContact:v("f-contact").trim(), phone:v("f-phone").trim(), email:v("f-email").trim(),
+        ownerId: isManager() ? v("f-owner") : currentUser.repId,
+      };
+
+      // Auto-stamp won/lost dates the first time they happen.
+      if (data.stage === 5) data.wonDate = (existing && existing.wonDate) ? existing.wonDate : todayStr();
+      if (status === "lost") {
+        data.lostReason = v("f-lostreason").trim() || null;
+        data.lostDate = (existing && existing.lostDate) ? existing.lostDate : todayStr();
+      } else { data.lostReason = null; data.lostDate = null; }
+
+      // A stage change counts as an interaction — reset the "needs updating" clock.
+      if (existing && data.stage !== existing.stage) data.lastTouch = todayStr();
+
+      if (state.editingId) {
+        updateAccount(state.editingId, data);
+        state.selectedId = state.editingId; state.view = "detail";
+      } else {
+        const now = new Date().toISOString();
+        addAccount(Object.assign({ id:"acc_"+Date.now(), createdAt:now, updatedAt:now, photos:[], activity:[], lastTouch:todayStr() }, data));
+        state.view = "list";
+      }
+      state.editingId = null;
+      render();
+    }
+
+    function addNote(id) {
+      const input = document.getElementById("note-input");
+      const text = input ? input.value.trim() : "";
+      if (!text) return;
+      const a = getAccount(id);
+      if (a) { a.activity.push({ id:"n_"+Date.now(), date:todayStr(), text }); a.lastTouch = todayStr(); }
+      render();
+    }
+
+    /* =============================================== CALL POINT VIEWS */
+    function callPointCard(c) {
+      const stale = needsCall(c);
+      const staleChip = stale ? '<span class="chip stale">Needs a call</span>' : "";
+      const fmc = c.fmcManaged ? '<span class="chip fmc">'+esc(c.fmcName)+'</span>' : '<span class="chip">Self-op</span>';
+      const photoStrip = (c.photos && c.photos.length)
+        ? '<div class="card-photos">' + c.photos.slice(0,4).map(p => '<img src="'+p.url+'" alt="" />').join("")
+          + (c.photos.length > 4 ? '<div class="more">+'+(c.photos.length-4)+'</div>' : '') + '</div>'
+        : "";
+      const lastLine = '<div class="nextstep'+(stale?' overdue':'')+'">Last call: '
+        + (c.lastCall ? fmtDate(c.lastCall)+(stale?' (over 4 weeks)':'') : 'never logged') + '</div>';
+      return ''
+        + '<article class="card" data-action="cp-open" data-id="'+c.id+'">'
+        +   '<div class="card-top"><h2 class="card-name">'+esc(c.name)+'</h2>'
+        +     '<span class="owner">'+repName(c.ownerId)+'</span></div>'
+        +   '<div class="chips">'+staleChip+'<span class="chip">'+c.segment+'</span>'+fmc+'</div>'
+        +   lastLine + photoStrip
+        + '</article>';
+    }
+
+    function callPointsView() {
+      const title = isManager() ? "Call Points — all reps" : "My call points";
+      const segOpts = '<option value="">All segments</option>' + SEGMENTS.map(s =>
+        '<option value="'+s+'"'+(state.cpSegment===s?' selected':'')+'>'+s+'</option>').join("");
+      let mgrFilters = "";
+      if (isManager()) {
+        const regionOpts = '<option value="">All regions</option>' + REGIONS.map(r =>
+          '<option value="'+r+'"'+(state.cpRegion===r?' selected':'')+'>'+r+'</option>').join("");
+        const ownerOpts = '<option value="">All reps</option>' + Object.keys(REPS).map(id =>
+          '<option value="'+id+'"'+(state.cpOwner===id?' selected':'')+'>'+REPS[id].name+'</option>').join("");
+        mgrFilters = '<select id="cpf-region" class="filt">'+regionOpts+'</select>'
+                   + '<select id="cpf-owner" class="filt">'+ownerOpts+'</select>';
+      }
+      return ''
+        + '<div class="toolbar"><h2 class="toolbar-title">'+title+'</h2>'
+        +   '<button class="btn btn-primary" data-action="cp-add">+ Add call point</button></div>'
+        + '<input id="cp-search" class="search" type="search" placeholder="Search call points by name…" value="'+esc(state.cpSearch)+'" />'
+        + '<div class="filters"><select id="cpf-segment" class="filt">'+segOpts+'</select>'+mgrFilters+'</div>'
+        + '<div id="cp-results"></div>';
+    }
+
+    function renderCpResults() {
+      const el = document.getElementById("cp-results");
+      if (!el) return;
+      let data = visibleCallPoints();
+      const total = data.length;
+      const staleCount = data.filter(needsCall).length;
+      if (state.cpStale)   data = data.filter(needsCall);
+      if (state.cpSearch)  data = data.filter(c => c.name.toLowerCase().includes(state.cpSearch.toLowerCase()));
+      if (state.cpSegment) data = data.filter(c => c.segment === state.cpSegment);
+      if (state.cpRegion)  data = data.filter(c => repRegion(c.ownerId) === state.cpRegion);
+      if (state.cpOwner)   data = data.filter(c => c.ownerId === state.cpOwner);
+      let banner = "";
+      if (state.cpStale)
+        banner = '<div class="alert-banner active" data-action="cp-toggle-stale">Showing call points needing a call — tap to clear</div>';
+      else if (staleCount > 0)
+        banner = '<div class="alert-banner" data-action="cp-toggle-stale">'+staleCount+' call point'+(staleCount>1?'s':'')+' need a call — none logged in over 4 weeks</div>';
+      const cards = data.length
+        ? data.map(callPointCard).join("")
+        : '<p style="color:var(--muted)">No call points match.</p>';
+      el.innerHTML = banner + '<p class="count">Showing '+data.length+' of '+total+'</p><div class="list">'+cards+'</div>';
+    }
+
+    function cpDetailView() {
+      const c = getCallPoint(state.cpId);
+      if (!c) return '<p>Call point not found.</p>';
+      const editable = canEdit(c);
+      const stale = needsCall(c);
+      const row = (k, v) => v ? '<div class="row"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>' : "";
+      const addressLine = c.address ? esc(c.address+', '+c.city+', '+c.state+' '+c.zip) : "";
+      const staleNote = stale
+        ? '<div class="alert-banner static">Needs a call — '+(c.lastCall ? daysSince(c.lastCall)+' days since the last logged call.' : 'no call has been logged yet.')+'</div>'
+        : "";
+
+      const callList = c.calls.length
+        ? '<div class="activity">' + c.calls.slice().reverse().map(n =>
+            '<div class="act"><span class="act-date">'+fmtDate(n.date)+'</span><span>'+esc(n.note)+'</span></div>').join("") + '</div>'
+        : '<p style="color:var(--muted);font-size:0.85rem;margin-top:8px">No calls logged yet.</p>';
+      const logAdd = editable
+        ? '<div class="note-add"><input id="cp-note-input" type="text" placeholder="What happened on the call?" />'
+          + '<button class="btn btn-ghost" data-action="log-call" data-id="'+c.id+'">Log call</button></div>'
+        : "";
+
+      const thumbs = c.photos.length
+        ? '<div class="photo-grid">' + c.photos.map(p =>
+            '<div class="photo-thumb"><img src="'+p.url+'" alt="call point photo" />'
+            + (editable ? '<button class="photo-del" data-action="cp-del-photo" data-id="'+c.id+'" data-photo="'+p.id+'">×</button>' : '')
+            + '</div>').join("") + '</div>'
+        : '<p style="color:var(--muted);font-size:0.85rem;margin-top:8px">No photos yet.</p>';
+      const addPhoto = editable
+        ? '<input type="file" id="cp-photo-input" accept="image/*" multiple style="display:none" />'
+          + '<div class="form-actions"><button class="btn btn-ghost" data-action="cp-add-photo">+ Add photo</button></div>'
+        : "";
+
+      const editBtn = editable
+        ? '<div class="form-actions"><button class="btn btn-primary" data-action="cp-edit">Edit call point</button></div>' : "";
+      const note = editable
+        ? (isManager() ? "Manager access — you can edit this call point or reassign it." : "This call point is in your book.")
+        : "Owned by "+repName(c.ownerId)+" ("+repRegion(c.ownerId)+"). View only.";
+
+      return ''
+        + '<button class="back" data-action="cp-back">‹ Back to call points</button>'
+        + '<h2 class="detail-name">'+esc(c.name)+'</h2>'
+        + staleNote
+        + '<div class="detail-rows">'
+        +   row("Segment", c.segment)
+        +   row("FMC managed", c.fmcManaged ? "Yes" : "No") + row("FMC", esc(c.fmcName))
+        +   row("Owner", repName(c.ownerId)) + row("Region", repRegion(c.ownerId))
+        +   row("Address", addressLine) + row("Primary contact", esc(c.primaryContact))
+        +   row("Phone", esc(c.phone)) + row("Email", esc(c.email))
+        +   row("Last call", c.lastCall ? fmtDate(c.lastCall) : "")
+        + '</div>'
+        + editBtn
+        + '<div class="form-section">Call log</div>' + logAdd + callList
+        + '<div class="form-section">Photos ('+c.photos.length+')</div>' + thumbs + addPhoto
+        + '<p class="ownership-note">'+note+'</p>';
+    }
+
+    function cpFormView(cp) {
+      const g = k => (cp && cp[k] != null) ? cp[k] : "";
+      const optList = (list, cur) => list.map(x => '<option value="'+x+'"'+(x===cur?' selected':'')+'>'+x+'</option>').join("");
+      const isEdit = !!cp;
+      const curFmc = cp ? (cp.fmcManaged ? "yes" : "no") : "";
+      const curOwner = cp ? cp.ownerId : Object.keys(REPS)[0];
+      const segOpts = '<option value="">— Select —</option>' + optList(SEGMENTS, g("segment"));
+      const fmcOpts = '<option value="">— Select —</option>' + optList(FMCS, g("fmcName"));
+      const ownerOpts = repOptionsGrouped(curOwner);
+      const fmcHidden = (cp && cp.fmcManaged) ? "" : " hidden";
+      const ownerField = isManager()
+        ? '<div class="field"><label>Owner (assign)</label><select id="cp-owner">'+ownerOpts+'</select></div>' : "";
+      const deleteRow = isEdit
+        ? '<div class="danger-row"><button class="btn btn-danger" data-action="cp-delete">Delete call point</button></div>' : "";
+      return ''
+        + '<button class="back" data-action="cp-cancel">‹ Cancel</button>'
+        + '<h2 class="detail-name">'+(isEdit?'Edit call point':'New call point')+'</h2>'
+        + '<div class="form-msg" id="cp-form-msg"></div>'
+        + '<div class="form-section">Account</div>'
+        + '<div class="field"><label>Account name</label>'
+        +   '<input id="cp-name" type="text" value="'+esc(g("name"))+'" placeholder="e.g. Riverside Office Park" /></div>'
+        + ownerField
+        + '<div class="field"><label>Segment</label><select id="cp-segment">'+segOpts+'</select></div>'
+        + '<div class="field"><label>FMC managed?</label><select id="cp-fmc">'
+        +   '<option value="">— Select —</option>'
+        +   '<option value="yes"'+(curFmc==="yes"?" selected":"")+'>Yes</option>'
+        +   '<option value="no"'+(curFmc==="no"?" selected":"")+'>No</option></select></div>'
+        + '<div class="field'+fmcHidden+'" id="cp-field-fmcname"><label>FMC</label><select id="cp-fmcname">'+fmcOpts+'</select></div>'
+        + '<div class="form-section">Location</div>'
+        + '<div class="field"><label>Address</label><input id="cp-address" type="text" value="'+esc(g("address"))+'" /></div>'
+        + '<div class="field"><label>City</label><input id="cp-city" type="text" value="'+esc(g("city"))+'" /></div>'
+        + '<div class="grid-2">'
+        +   '<div class="field"><label>State</label><input id="cp-state" type="text" value="'+esc(g("state"))+'" placeholder="NC" /></div>'
+        +   '<div class="field"><label>Zip</label><input id="cp-zip" type="text" value="'+esc(g("zip"))+'" /></div>'
+        + '</div>'
+        + '<div class="form-section">Primary contact</div>'
+        + '<div class="field"><label>Contact name</label><input id="cp-contact" type="text" value="'+esc(g("primaryContact"))+'" /></div>'
+        + '<div class="field"><label>Phone</label><input id="cp-phone" type="tel" value="'+esc(g("phone"))+'" /></div>'
+        + '<div class="field"><label>Email</label><input id="cp-email" type="email" value="'+esc(g("email"))+'" /></div>'
+        + '<div class="form-actions">'
+        +   '<button class="btn btn-primary" data-action="cp-save">'+(isEdit?'Save changes':'Save call point')+'</button>'
+        +   '<button class="btn btn-ghost" data-action="cp-cancel">Cancel</button>'
+        + '</div>'
+        + deleteRow;
+    }
+
+    function saveCpForm() {
+      const v = id => document.getElementById(id).value;
+      const name = v("cp-name").trim();
+      const segment = v("cp-segment");
+      if (!name || !segment) {
+        document.getElementById("cp-form-msg").textContent = "Account name and segment are required.";
+        return;
+      }
+      const fmcManaged = v("cp-fmc") === "yes";
+      const data = {
+        name, segment,
+        fmcManaged, fmcName: fmcManaged ? (v("cp-fmcname") || null) : null,
+        address:v("cp-address").trim(), city:v("cp-city").trim(),
+        state:v("cp-state").trim(), zip:v("cp-zip").trim(),
+        primaryContact:v("cp-contact").trim(), phone:v("cp-phone").trim(), email:v("cp-email").trim(),
+        ownerId: isManager() ? v("cp-owner") : currentUser.repId,
+      };
+      if (state.cpEditId) {
+        updateCallPoint(state.cpEditId, data);
+        state.cpId = state.cpEditId; state.view = "cp-detail";
+      } else {
+        addCallPoint(Object.assign({ id:"cp_"+Date.now(), photos:[], calls:[], lastCall:"" }, data));
+        state.view = "callpoints";
+      }
+      state.cpEditId = null;
+      render();
+    }
+
+    function logCall(id) {
+      const input = document.getElementById("cp-note-input");
+      const note = input ? input.value.trim() : "";
+      if (!note) return;
+      const c = getCallPoint(id);
+      if (c) { c.calls.push({ id:"c_"+Date.now(), date:todayStr(), note }); c.lastCall = todayStr(); }
+      render();
+    }
+
+    /* ========================================================== RENDER */
+    function renderHeader() {
+      const el = document.getElementById("role-pill");
+      el.outerHTML = isManager()
+        ? '<span id="role-pill" class="role-pill mgr">Manager</span>'
+        : '<span id="role-pill" class="role-pill rep">Rep · '+(currentUser.region || "—")+'</span>';
+    }
+    function currentSection() {
+      const v = state.view;
+      if (v === "list" || v === "detail" || v === "form") return "pipeline";
+      if (v === "callpoints" || v === "cp-detail" || v === "cp-form") return "callpoints";
+      if (v === "wins") return "wins";
+      if (v === "team") return "team";
+      return "home";
+    }
+    function renderBottomNav() {
+      const items = [
+        { id:"home",       label:"Home",        icon:ICONS.home },
+        { id:"pipeline",   label:"Pipeline",    icon:ICONS.pipeline },
+        { id:"callpoints", label:"Call Points", icon:ICONS.calls },
+        { id:"wins",       label:"Wins",        icon:ICONS.wins },
+      ];
+      if (isManager()) items.push({ id:"team", label:"Team", icon:ICONS.team });
+      const active = currentSection();
+      document.getElementById("bottomnav").innerHTML = items.map(it =>
+        '<button class="navitem'+(active===it.id?' active':'')+'" data-action="nav-'+it.id+'">'
+        + '<span class="navicon">'+it.icon+'</span><span class="navlabel">'+it.label+'</span></button>').join("");
+    }
+    function render() {
+      if (state.view === "team" && !isManager()) state.view = "list";
+      renderHeader();
+      renderBottomNav();
+      const app = document.getElementById("app");
+      if (state.view === "home")            app.innerHTML = landingView();
+      else if (state.view === "list")       { app.innerHTML = listView(); renderResults(); }
+      else if (state.view === "detail")     app.innerHTML = detailView();
+      else if (state.view === "form")       app.innerHTML = formView(state.editingId ? getAccount(state.editingId) : null);
+      else if (state.view === "team")       app.innerHTML = teamView();
+      else if (state.view === "wins")       app.innerHTML = winsView();
+      else if (state.view === "callpoints") { app.innerHTML = callPointsView(); renderCpResults(); }
+      else if (state.view === "cp-detail")  app.innerHTML = cpDetailView();
+      else if (state.view === "cp-form")    app.innerHTML = cpFormView(state.cpEditId ? getCallPoint(state.cpEditId) : null);
+    }
+
+    /* ============================================================ AUTH */
+    // Turn a profiles row from the database into the currentUser shape the rest
+    // of the app already understands. The uuid doubles as repId / managerId, so
+    // every existing ownership check keeps working without changes.
+    function profileToUser(p) {
+      return {
+        id:        p.id,
+        role:      p.role,
+        name:      p.full_name,
+        title:     p.title,
+        region:    p.region,
+        repId:     p.role === "rep"     ? p.id : null,
+        managerId: p.role === "manager" ? p.id : null,
+      };
+    }
+
+    // Have the two connection values actually been filled in yet?
+    function credsSet() {
+      return !SUPABASE_URL.includes("YOUR-PROJECT") && !SUPABASE_ANON_KEY.includes("YOUR-ANON");
+    }
+
+    // Look up the logged-in user's profile, then start the app.
+    async function startSession(userId) {
+      const { data, error } = await sb.from("profiles").select("*").eq("id", userId).single();
+      if (error || !data) { renderLogin("Signed in, but no profile exists for this account yet."); return; }
+      currentUser = profileToUser(data);
+      state.view = "home";
+      render();
+    }
+
+    async function doLogin() {
+      const email    = document.getElementById("login-email").value.trim();
+      const password = document.getElementById("login-password").value;
+      const errEl    = document.getElementById("login-error");
+      errEl.textContent = "Signing in…";
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) { errEl.textContent = error.message; return; }
+      await startSession(data.user.id);
+    }
+
+    async function doLogout() {
+      await sb.auth.signOut();
+      currentUser = null;
+      renderLogin();
+    }
+
+    // The login screen — shown whenever no one is logged in.
+    function renderLogin(message) {
+      document.getElementById("role-pill").outerHTML = '<span id="role-pill"></span>';
+      document.getElementById("bottomnav").innerHTML = "";
+      document.getElementById("app").innerHTML = ''
+        + '<div class="login-wrap"><div class="login-card">'
+        +   '<div class="login-title">Sign in</div>'
+        +   '<div class="login-sub">NCRAM Pipeline</div>'
+        +   '<label class="login-lbl">Email</label>'
+        +   '<input id="login-email" class="login-input" type="email" autocomplete="username" />'
+        +   '<label class="login-lbl">Password</label>'
+        +   '<input id="login-password" class="login-input" type="password" autocomplete="current-password" />'
+        +   '<button class="btn btn-primary login-btn" data-action="login">Sign in</button>'
+        +   '<div id="login-error" class="login-error">'+(message ? esc(message) : "")+'</div>'
+        + '</div></div>';
+    }
+
+    // On load: if the connection isn't configured, say so; otherwise resume an
+    // existing session (so a refresh keeps you logged in) or show the login screen.
+    async function boot() {
+      if (!credsSet()) {
+        renderLogin("Add your Project URL and anon key in the CONFIG section near the top of this file, then reload.");
+        return;
+      }
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) await startSession(session.user.id);
+      else renderLogin();
+    }
+
+    const app = document.getElementById("app");
+
+    // Clicks are delegated at the document level so the tab bar (outside #app) is heard too.
+    document.addEventListener("click", (e) => {
+      const el = e.target.closest("[data-action]");
+      if (!el) return;
+      const action = el.dataset.action;
+      if (action === "login")             { doLogin();  return; }
+      else if (action === "logout")       { doLogout(); return; }
+      else if (action === "add")          { state.editingId = null; state.view = "form"; render(); }
+      else if (action === "open")         { state.selectedId = el.dataset.id; state.view = "detail"; render(); }
+      else if (action === "edit")         { state.editingId = state.selectedId; state.view = "form"; render(); }
+      else if (action === "save")         { saveForm(); }
+      else if (action === "delete")       {
+        if (confirm("Delete this account permanently? This can't be undone.")) {
+          deleteAccount(state.editingId || state.selectedId);
+          state.editingId = null; state.selectedId = null; state.view = "list"; render();
+        }
+      }
+      else if (action === "cancel-form")  { state.view = state.editingId ? "detail" : "list"; state.selectedId = state.editingId || state.selectedId; state.editingId = null; render(); }
+      else if (action === "back")         { state.view = "list"; state.selectedId = null; render(); }
+      else if (action === "tab-pipeline") { state.view = "list"; state.selectedId = null; render(); }
+      else if (action === "tab-wins")     { state.view = "wins"; render(); }
+      else if (action === "tab-team")     { state.view = "team"; render(); }
+      else if (action === "nav-home")       { state.view = "home"; render(); }
+      else if (action === "nav-pipeline")   { state.view = "list"; state.selectedId = null; render(); }
+      else if (action === "nav-callpoints") { state.view = "callpoints"; state.cpId = null; render(); }
+      else if (action === "nav-wins")       { state.view = "wins"; render(); }
+      else if (action === "nav-team")       { state.view = "team"; render(); }
+      else if (action === "avatar-edit")    { document.getElementById("avatar-input").click(); }
+      else if (action === "toggle-stale") { state.filters.stale = !state.filters.stale; renderResults(); }
+      else if (action === "add-note")     { addNote(el.dataset.id); }
+      else if (action === "add-photo")    { document.getElementById("photo-input").click(); }
+      else if (action === "del-photo")    {
+        const acct = getAccount(el.dataset.id);
+        if (acct) acct.photos = acct.photos.filter(p => p.id !== el.dataset.photo);
+        render();
+      }
+      else if (action === "tab-callpoints") { state.view = "callpoints"; state.cpId = null; render(); }
+      else if (action === "cp-add")         { state.cpEditId = null; state.view = "cp-form"; render(); }
+      else if (action === "cp-open")        { state.cpId = el.dataset.id; state.view = "cp-detail"; render(); }
+      else if (action === "cp-edit")        { state.cpEditId = state.cpId; state.view = "cp-form"; render(); }
+      else if (action === "cp-save")        { saveCpForm(); }
+      else if (action === "cp-cancel")      { state.view = state.cpEditId ? "cp-detail" : "callpoints"; state.cpId = state.cpEditId || state.cpId; state.cpEditId = null; render(); }
+      else if (action === "cp-back")        { state.view = "callpoints"; state.cpId = null; render(); }
+      else if (action === "cp-delete")      {
+        if (confirm("Delete this call point permanently? This can't be undone.")) {
+          deleteCallPoint(state.cpEditId || state.cpId);
+          state.cpEditId = null; state.cpId = null; state.view = "callpoints"; render();
+        }
+      }
+      else if (action === "log-call")        { logCall(el.dataset.id); }
+      else if (action === "cp-toggle-stale") { state.cpStale = !state.cpStale; renderCpResults(); }
+      else if (action === "cp-add-photo")    { document.getElementById("cp-photo-input").click(); }
+      else if (action === "cp-del-photo")    {
+        const cp = getCallPoint(el.dataset.id);
+        if (cp) cp.photos = cp.photos.filter(p => p.id !== el.dataset.photo);
+        render();
+      }
+    });
+
+    // Enter anywhere on the login screen submits it.
+    app.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && document.getElementById("login-password")) { e.preventDefault(); doLogin(); }
+    });
+
+    // Live search updates only the results list (keeps the search box focused).
+    app.addEventListener("input", (e) => {
+      if (e.target.id === "flt-search") { state.filters.search = e.target.value; renderResults(); }
+      if (e.target.id === "cp-search")  { state.cpSearch = e.target.value; renderCpResults(); }
+    });
+
+    app.addEventListener("change", (e) => {
+      const id = e.target.id;
+      if (id === "avatar-input") {
+        const file = (e.target.files || [])[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => { profilePics[currentUserKey()] = reader.result; render(); };
+        reader.readAsDataURL(file);
+        return;
+      }
+      if (id === "flt-stage")   { state.filters.stage = e.target.value;   renderResults(); }
+      if (id === "flt-segment") { state.filters.segment = e.target.value; renderResults(); }
+      if (id === "flt-region")  { state.filters.region = e.target.value;  renderResults(); }
+      if (id === "flt-owner")   { state.filters.owner = e.target.value;   renderResults(); }
+      if (id === "flt-status")  { state.filters.status = e.target.value;  renderResults(); }
+      if (id === "cpf-segment") { state.cpSegment = e.target.value; renderCpResults(); }
+      if (id === "cpf-region")  { state.cpRegion  = e.target.value; renderCpResults(); }
+      if (id === "cpf-owner")   { state.cpOwner   = e.target.value; renderCpResults(); }
+      if (id === "f-segment")   document.getElementById("field-subcat").classList.toggle("hidden", e.target.value !== "B&I");
+      if (id === "f-fmc")       document.getElementById("field-fmcname").classList.toggle("hidden", e.target.value !== "yes");
+      if (id === "f-status")    document.getElementById("field-lostreason").classList.toggle("hidden", e.target.value !== "lost");
+      if (id === "photo-input") {
+        const acct = getAccount(state.selectedId);
+        if (!acct) return;
+        Array.from(e.target.files || []).forEach(file => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            acct.photos.push({ id:"ph_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), url:reader.result });
+            render();
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+      if (id === "cp-fmc") document.getElementById("cp-field-fmcname").classList.toggle("hidden", e.target.value !== "yes");
+      if (id === "cp-photo-input") {
+        const cp = getCallPoint(state.cpId);
+        if (!cp) return;
+        Array.from(e.target.files || []).forEach(file => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            cp.photos.push({ id:"ph_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), url:reader.result });
+            render();
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+    });
+
+    boot();
+  </script>
+</body>
+</html>
