@@ -328,8 +328,16 @@
       }
       return row;
     }
-    // Database row → app object. Re-adds photos and activity, which don't live in
-    // the database yet (those are the next two steps), so the views don't break.
+    // Child rows (account_activity) → the app's activity items. Sorted oldest
+    // first so the detail view's reverse() shows newest at the top.
+    function activityRowsToItems(rows) {
+      return (rows || [])
+        .slice()
+        .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
+        .map(r => ({ id:r.id, date:r.logged_at, text:r.note }));
+    }
+    // Database row → app object. Photos still live only in memory (Storage step);
+    // activity now comes from the account_activity table when it's embedded.
     function rowToAccount(r) {
       return {
         id:r.id, accountName:r.account_name, segment:r.segment, biSubCategory:r.bi_subcategory,
@@ -341,7 +349,7 @@
         wonDate:r.won_date||"", lostReason:r.lost_reason||"", lostDate:r.lost_date||"",
         lastTouch:r.last_touch || todayStr(), ownerId:r.owner_id,
         createdAt:r.created_at, updatedAt:r.updated_at,
-        photos:[], activity:[],
+        photos:[], activity: activityRowsToItems(r.account_activity),
       };
     }
 
@@ -354,7 +362,7 @@
     // screen and the database never disagree. Each returns the saved record (or
     // null/false on failure) so the caller knows whether to proceed.
     async function loadAccounts() {
-      const { data, error } = await sb.from("accounts").select("*").order("created_at", { ascending:false });
+      const { data, error } = await sb.from("accounts").select("*, account_activity(*)").order("created_at", { ascending:false });
       if (error) { console.error("loadAccounts:", error.message); accounts = []; return; }
       accounts = (data || []).map(rowToAccount);
     }
@@ -424,6 +432,13 @@
       }
       return row;
     }
+    // Child rows (call_logs) → the app's call items, oldest first.
+    function callLogRowsToItems(rows) {
+      return (rows || [])
+        .slice()
+        .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
+        .map(r => ({ id:r.id, date:r.logged_at, note:r.note }));
+    }
     function rowToCallPoint(r) {
       return {
         id:r.id, name:r.name, segment:r.segment,
@@ -432,14 +447,14 @@
         primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"",
         lastCall:r.last_call||"", ownerId:r.owner_id,
         createdAt:r.created_at, updatedAt:r.updated_at,
-        photos:[], calls:[],
+        photos:[], calls: callLogRowsToItems(r.call_logs),
       };
     }
 
     function getCallPoints()  { return callPoints; }
     function getCallPoint(id) { return callPoints.find(c => c.id === id); }
     async function loadCallPoints() {
-      const { data, error } = await sb.from("call_points").select("*").order("created_at", { ascending:false });
+      const { data, error } = await sb.from("call_points").select("*, call_logs(*)").order("created_at", { ascending:false });
       if (error) { console.error("loadCallPoints:", error.message); callPoints = []; return; }
       callPoints = (data || []).map(rowToCallPoint);
     }
@@ -862,12 +877,21 @@
       render();
     }
 
-    function addNote(id) {
+    async function addNote(id) {
       const input = document.getElementById("note-input");
       const text = input ? input.value.trim() : "";
       if (!text) return;
+      const today = todayStr();
+      // 1. Save the note to its own table.
+      const { data, error } = await sb.from("account_activity")
+        .insert({ account_id:id, note:text, logged_at:today, author_id:currentUser.id })
+        .select().single();
+      if (error) { alert("Couldn't save note: " + error.message); return; }
+      // 2. A note counts as a touch — reset the account's "needs updating" clock.
+      await sb.from("accounts").update({ last_touch:today }).eq("id", id);
+      // 3. Mirror both changes into the cache so the screen matches.
       const a = getAccount(id);
-      if (a) { a.activity.push({ id:"n_"+Date.now(), date:todayStr(), text }); a.lastTouch = todayStr(); }
+      if (a) { a.activity.push({ id:data.id, date:data.logged_at, text:data.note }); a.lastTouch = today; }
       render();
     }
 
@@ -1064,12 +1088,19 @@
       render();
     }
 
-    function logCall(id) {
+    async function logCall(id) {
       const input = document.getElementById("cp-note-input");
       const note = input ? input.value.trim() : "";
       if (!note) return;
+      const today = todayStr();
+      const { data, error } = await sb.from("call_logs")
+        .insert({ call_point_id:id, note, logged_at:today, author_id:currentUser.id })
+        .select().single();
+      if (error) { alert("Couldn't log call: " + error.message); return; }
+      // Logging a call resets the call point's 4-week "needs a call" clock.
+      await sb.from("call_points").update({ last_call:today }).eq("id", id);
       const c = getCallPoint(id);
-      if (c) { c.calls.push({ id:"c_"+Date.now(), date:todayStr(), note }); c.lastCall = todayStr(); }
+      if (c) { c.calls.push({ id:data.id, date:data.logged_at, note:data.note }); c.lastCall = today; }
       render();
     }
 
