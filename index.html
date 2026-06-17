@@ -260,7 +260,7 @@
     async function loadPeople() {
       const { data, error } = await sb.from("profiles").select("*");
       if (error) { console.error("loadPeople:", error.message); people = []; return; }
-      people = (data || []).map(p => ({ id:p.id, name:p.full_name, role:p.role, region:p.region, title:p.title }));
+      people = (data || []).map(p => ({ id:p.id, name:p.full_name, role:p.role, region:p.region, title:p.title, avatarUrl:p.avatar_url }));
     }
     function fmtDate(d)    { return d ? new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : ""; }
     function todayStr()    { return new Date().toISOString().slice(0,10); }
@@ -284,8 +284,7 @@
     function canEdit(account) { return isManager() || account.ownerId === currentUser.repId; }
 
     // Profile pictures, keyed by the logged-in user's id (manager or rep).
-    const profilePics = {};
-    function currentUserKey() { return isManager() ? currentUser.managerId : currentUser.repId; }
+    // (Avatars are stored in the database — see avatar handling below.)
     function userInitials(name) { return (name||"").split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
 
     // Line icons for the bottom navigation.
@@ -508,9 +507,8 @@
     }
 
     function landingView() {
-      const key = currentUserKey();
-      const pic = profilePics[key];
-      const inner = pic ? '<img src="'+pic+'" alt="profile" />' : userInitials(currentUser.name);
+      const pic = currentUser.avatarUrl;
+      const inner = pic ? '<img src="'+esc(pic)+'" alt="profile" />' : userInitials(currentUser.name);
       const roleLabel = isManager()
         ? (currentUser.title || "Manager")
         : "NCRAM · "+(currentUser.region || "—");
@@ -1169,6 +1167,7 @@
         name:      p.full_name,
         title:     p.title,
         region:    p.region,
+        avatarUrl: p.avatar_url,
         repId:     p.role === "rep"     ? p.id : null,
         managerId: p.role === "manager" ? p.id : null,
       };
@@ -1381,9 +1380,21 @@
       if (id === "avatar-input") {
         const file = (e.target.files || [])[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => { profilePics[currentUserKey()] = reader.result; render(); };
-        reader.readAsDataURL(file);
+        (async () => {
+          const blob = await resizeImage(file, 512, 0.85).catch(() => null);  // smaller — it's a thumbnail
+          if (!blob) { alert("Couldn't process that image."); return; }
+          // Fixed path per user + upsert = one avatar file each, no orphans.
+          const path = "avatars/" + currentUser.id + ".jpg";
+          const { error } = await sb.storage.from("photos").upload(path, blob, { contentType:"image/jpeg", upsert:true });
+          if (error) { alert("Couldn't upload avatar: " + error.message); return; }
+          // The path is fixed, so add a timestamp to the URL to dodge the cache.
+          const url = sb.storage.from("photos").getPublicUrl(path).data.publicUrl + "?t=" + Date.now();
+          const { error: saveErr } = await sb.from("profiles").update({ avatar_url: url }).eq("id", currentUser.id);
+          if (saveErr) { alert("Couldn't save avatar: " + saveErr.message); return; }
+          currentUser.avatarUrl = url;
+          const me = personById(currentUser.id); if (me) me.avatarUrl = url;
+          render();
+        })();
         return;
       }
       if (id === "flt-stage")   { state.filters.stage = e.target.value;   renderResults(); }
