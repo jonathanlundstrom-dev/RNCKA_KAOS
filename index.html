@@ -220,8 +220,8 @@
     //   Project Settings → API → "Project URL"  and the  "anon public"  key.
     // The anon key is safe to ship in the browser — Row-Level Security is what
     // protects the data, not the secrecy of this key.
-    const SUPABASE_URL      = "https://izbqtdzmfrqnpxxslzlp.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_X6Xvz0GUfHndHsUxOZgfyw_7y2m2h2M";
+    const SUPABASE_URL      = "https://YOUR-PROJECT.supabase.co";
+    const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness"];
@@ -406,46 +406,70 @@
     /* ===================================================== CALL POINTS */
     // A rep's full book of accounts they service and call on — separate from
     // the active sales pipeline. No stage; the focus is regular engagement.
-    let callPoints = [
-      { id:"cp_001", name:"Horizon Tech Campus", segment:"B&I", fmcManaged:true, fmcName:"Compass Group",
-        address:"500 Innovation Dr", city:"Austin", state:"TX", zip:"78701",
-        primaryContact:"Beth Crane", phone:"512-555-0144", email:"bcrane@horizontech.com",
-        ownerId:"rep_aquinet" },
-      { id:"cp_002", name:"Northside Medical Center", segment:"Healthcare", fmcManaged:true, fmcName:"Sodexo",
-        address:"77 Wellness Blvd", city:"Columbus", state:"OH", zip:"43215",
-        primaryContact:"Omar Reed", phone:"614-555-0188", email:"oreed@northsidemed.org",
-        ownerId:"rep_rwagner" },
-      { id:"cp_003", name:"Summit College Union", segment:"Collegiate", fmcManaged:false, fmcName:null,
-        address:"12 Quad St", city:"Providence", state:"RI", zip:"02903",
-        primaryContact:"Lena Park", phone:"401-555-0121", email:"dining@summitcollege.edu",
-        ownerId:"rep_ctrott" },
-      { id:"cp_004", name:"Pulse Gym — Midtown", segment:"Fitness", fmcManaged:false, fmcName:null,
-        address:"88 Market Sq", city:"Charlotte", state:"NC", zip:"28202",
-        primaryContact:"Drew Nash", phone:"704-555-0133", email:"drew@pulsegym.com",
-        ownerId:"rep_aquinet" },
-    ];
-    callPoints.forEach(c => {
-      if (!c.photos) c.photos = [];
-      if (!c.calls) c.calls = [];          // logged calls: [{id, date, note}]
-      if (c.lastCall == null) c.lastCall = "";
-    });
+    // Same as accounts: this is a local cache mirroring the database.
+    let callPoints = [];
 
-    function getCallPoints()       { return callPoints; }
-    function getCallPoint(id)      { return callPoints.find(c => c.id === id); }
-    function addCallPoint(c)       { callPoints.push(c); }
-    function updateCallPoint(id,c) { const x = getCallPoint(id); if (x) Object.assign(x, c); }
-    function deleteCallPoint(id)   { callPoints = callPoints.filter(c => c.id !== id); }
+    const CALLPOINT_FIELDS = {
+      name:"name", segment:"segment", fmcManaged:"fmc_managed", fmcName:"fmc_name",
+      address:"address", city:"city", state:"state", zip:"zip",
+      primaryContact:"primary_contact", phone:"phone", email:"email",
+      lastCall:"last_call", ownerId:"owner_id",
+    };
+    function callPointToRow(obj) {
+      const row = {};
+      for (const key in CALLPOINT_FIELDS) {
+        if (!(key in obj)) continue;
+        let val = obj[key];
+        if (val === "") val = null;
+        row[CALLPOINT_FIELDS[key]] = val;
+      }
+      return row;
+    }
+    function rowToCallPoint(r) {
+      return {
+        id:r.id, name:r.name, segment:r.segment,
+        fmcManaged:!!r.fmc_managed, fmcName:r.fmc_name,
+        address:r.address||"", city:r.city||"", state:r.state||"", zip:r.zip||"",
+        primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"",
+        lastCall:r.last_call||"", ownerId:r.owner_id,
+        createdAt:r.created_at, updatedAt:r.updated_at,
+        photos:[], calls:[],
+      };
+    }
+
+    function getCallPoints()  { return callPoints; }
+    function getCallPoint(id) { return callPoints.find(c => c.id === id); }
+    async function loadCallPoints() {
+      const { data, error } = await sb.from("call_points").select("*").order("created_at", { ascending:false });
+      if (error) { console.error("loadCallPoints:", error.message); callPoints = []; return; }
+      callPoints = (data || []).map(rowToCallPoint);
+    }
+    async function addCallPoint(cp) {
+      const { data, error } = await sb.from("call_points").insert(callPointToRow(cp)).select().single();
+      if (error) { alert("Couldn't save call point: " + error.message); return null; }
+      const saved = rowToCallPoint(data);
+      callPoints.unshift(saved);
+      return saved;
+    }
+    async function updateCallPoint(id, changes) {
+      const { data, error } = await sb.from("call_points").update(callPointToRow(changes)).eq("id", id).select().single();
+      if (error) { alert("Couldn't update call point: " + error.message); return null; }
+      const saved = rowToCallPoint(data);
+      const i = callPoints.findIndex(c => c.id === id);
+      if (i >= 0) { saved.photos = callPoints[i].photos; saved.calls = callPoints[i].calls; callPoints[i] = saved; }
+      else callPoints.push(saved);
+      return saved;
+    }
+    async function deleteCallPoint(id) {
+      const { error } = await sb.from("call_points").delete().eq("id", id);
+      if (error) { alert("Couldn't delete call point: " + error.message); return false; }
+      callPoints = callPoints.filter(c => c.id !== id);
+      return true;
+    }
     function visibleCallPoints()   { return isManager() ? getCallPoints() : getCallPoints().filter(c => c.ownerId === currentUser.repId); }
 
     const CALL_STALE_DAYS = 28;            // 4 weeks
     function needsCall(c) { return daysSince(c.lastCall) >= CALL_STALE_DAYS; }
-
-    // Demo last-call dates: three stale (>4 weeks), one fresh.
-    getCallPoint("cp_001").lastCall = "2026-05-01";
-    getCallPoint("cp_002").lastCall = "2026-05-02";
-    getCallPoint("cp_003").lastCall = "2026-05-10";
-    getCallPoint("cp_004").lastCall = "2026-06-10";
-    getCallPoint("cp_001").calls = [ { id:"c1", date:"2026-05-01", note:"Quarterly check-in; reordered product." } ];
 
     /* =========================================================== STATE */
     const DEFAULT_FILTERS = { search:"", stage:"", segment:"", region:"", owner:"", status:"active", stale:false };
@@ -1012,7 +1036,7 @@
         + deleteRow;
     }
 
-    function saveCpForm() {
+    async function saveCpForm() {
       const v = id => document.getElementById(id).value;
       const name = v("cp-name").trim();
       const segment = v("cp-segment");
@@ -1027,13 +1051,14 @@
         address:v("cp-address").trim(), city:v("cp-city").trim(),
         state:v("cp-state").trim(), zip:v("cp-zip").trim(),
         primaryContact:v("cp-contact").trim(), phone:v("cp-phone").trim(), email:v("cp-email").trim(),
-        ownerId: isManager() ? v("cp-owner") : currentUser.repId,
       };
       if (state.cpEditId) {
-        updateCallPoint(state.cpEditId, data);
+        const ok = await updateCallPoint(state.cpEditId, data);
+        if (!ok) return;
         state.cpId = state.cpEditId; state.view = "cp-detail";
       } else {
-        addCallPoint(Object.assign({ id:"cp_"+Date.now(), photos:[], calls:[], lastCall:"" }, data));
+        const saved = await addCallPoint(Object.assign({ ownerId: currentUser.id }, data));
+        if (!saved) return;
         state.view = "callpoints";
       }
       state.cpEditId = null;
@@ -1119,7 +1144,8 @@
       const { data, error } = await sb.from("profiles").select("*").eq("id", userId).single();
       if (error || !data) { renderLogin("Signed in, but no profile exists for this account yet."); return; }
       currentUser = profileToUser(data);
-      await loadAccounts();
+      // Both loads are independent, so run them at the same time.
+      await Promise.all([loadAccounts(), loadCallPoints()]);
       state.view = "home";
       render();
     }
@@ -1138,6 +1164,7 @@
       await sb.auth.signOut();
       currentUser = null;
       accounts = [];
+      callPoints = [];
       renderLogin();
     }
 
@@ -1219,8 +1246,10 @@
       else if (action === "cp-back")        { state.view = "callpoints"; state.cpId = null; render(); }
       else if (action === "cp-delete")      {
         if (confirm("Delete this call point permanently? This can't be undone.")) {
-          deleteCallPoint(state.cpEditId || state.cpId);
-          state.cpEditId = null; state.cpId = null; state.view = "callpoints"; render();
+          deleteCallPoint(state.cpEditId || state.cpId).then(ok => {
+            if (!ok) return;
+            state.cpEditId = null; state.cpId = null; state.view = "callpoints"; render();
+          });
         }
       }
       else if (action === "log-call")        { logCall(el.dataset.id); }
