@@ -220,8 +220,8 @@
     //   Project Settings → API → "Project URL"  and the  "anon public"  key.
     // The anon key is safe to ship in the browser — Row-Level Security is what
     // protects the data, not the secrecy of this key.
-    const SUPABASE_URL      = "https://izbqtdzmfrqnpxxslzlp.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_X6Xvz0GUfHndHsUxOZgfyw_7y2m2h2M";
+    const SUPABASE_URL      = "https://YOUR-PROJECT.supabase.co";
+    const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness"];
@@ -300,55 +300,88 @@
     };
 
     /* ============================================================ DATA */
-    let accounts = [
-      { id:"acc_001", accountName:"Pinnacle Financial HQ", segment:"B&I",
-        biSubCategory:"White Collar", fmcManaged:true, fmcName:"Aramark", stage:3,
-        address:"200 Market St", city:"San Francisco", state:"CA", zip:"94105",
-        primaryContact:"Dana Wells", phone:"415-555-0182", email:"dwells@pinnaclefin.com",
-        ownerId:"rep_aquinet" },
-      { id:"acc_002", accountName:"Granite Steel Works", segment:"B&I",
-        biSubCategory:"Blue Collar", fmcManaged:false, fmcName:null, stage:1,
-        address:"1400 Industrial Pkwy", city:"Cleveland", state:"OH", zip:"44114",
-        primaryContact:"Mike Tran", phone:"216-555-0147", email:"m.tran@granitesteel.com",
-        ownerId:"rep_rwagner" },
-      { id:"acc_003", accountName:"Mercy Regional Medical", segment:"Healthcare",
-        biSubCategory:null, fmcManaged:true, fmcName:"Sodexo", stage:2,
-        address:"900 Hospital Dr", city:"Dallas", state:"TX", zip:"75201",
-        primaryContact:"Rosa Lim", phone:"214-555-0199", email:"rlim@mercyregional.org",
-        ownerId:"rep_knaviaux" },
-      { id:"acc_004", accountName:"Lakeshore University Dining", segment:"Collegiate",
-        biSubCategory:null, fmcManaged:false, fmcName:null, stage:4,
-        address:"1 Campus Way", city:"Boston", state:"MA", zip:"02118",
-        primaryContact:"Dean Hale", phone:"617-555-0123", email:"dining@lakeshore.edu",
-        ownerId:"rep_ctrott" },
-      { id:"acc_005", accountName:"Apex Fitness — Southeast", segment:"Fitness",
-        biSubCategory:null, fmcManaged:false, fmcName:null, stage:5,
-        address:"55 Peachtree Rd", city:"Atlanta", state:"GA", zip:"30303",
-        primaryContact:"Kim Foster", phone:"404-555-0166", email:"kfoster@apexfit.com",
-        ownerId:"rep_jqueja" },
-      { id:"acc_006", accountName:"Metro Transit Vending", segment:"Vending",
-        biSubCategory:null, fmcManaged:false, fmcName:null, stage:2,
-        address:"300 Transit Center", city:"Kansas City", state:"MO", zip:"64106",
-        primaryContact:"Leon Park", phone:"816-555-0175", email:"lpark@metrotransit.gov",
-        ownerId:"rep_sford" },
-    ];
-    // Normalize: make sure every account has the newer fields.
-    accounts.forEach(a => {
-      if (!a.photos) a.photos = [];
-      if (a.annualVolume == null) a.annualVolume = 0;
-      if (!a.status) a.status = "active";        // active | lost
-      if (!a.activity) a.activity = [];          // [{id, date, text}]
-      if (a.nextStep == null) a.nextStep = "";
-      if (a.nextStepDate == null) a.nextStepDate = "";
-      if (a.lastTouch == null) a.lastTouch = todayStr();   // last note or stage change
-    });
+    // Accounts now live in Supabase. This array is a local cache — a mirror of
+    // the rows the database returns for whoever is logged in (RLS decides which
+    // rows that is). Reads come from this cache so the UI stays instant; writes
+    // go to the database and then update the cache. loadAccounts() fills it.
+    let accounts = [];
+
+    // The seam's translation layer. The database speaks snake_case; the app
+    // speaks camelCase. These two functions are the one place that knows both.
+    const ACCOUNT_FIELDS = {
+      accountName:"account_name", segment:"segment", biSubCategory:"bi_subcategory",
+      fmcManaged:"fmc_managed", fmcName:"fmc_name", stage:"stage", status:"status",
+      annualVolume:"annual_volume", address:"address", city:"city", state:"state", zip:"zip",
+      primaryContact:"primary_contact", phone:"phone", email:"email",
+      nextStep:"next_step", nextStepDate:"next_step_date", wonDate:"won_date",
+      lostReason:"lost_reason", lostDate:"lost_date", lastTouch:"last_touch", ownerId:"owner_id",
+    };
+    // App object → database row. Only maps keys that are actually present, so the
+    // same function serves a full insert and a partial update. Empty strings
+    // become null, because the database rejects "" for its date columns.
+    function accountToRow(obj) {
+      const row = {};
+      for (const key in ACCOUNT_FIELDS) {
+        if (!(key in obj)) continue;
+        let val = obj[key];
+        if (val === "") val = null;
+        row[ACCOUNT_FIELDS[key]] = val;
+      }
+      return row;
+    }
+    // Database row → app object. Re-adds photos and activity, which don't live in
+    // the database yet (those are the next two steps), so the views don't break.
+    function rowToAccount(r) {
+      return {
+        id:r.id, accountName:r.account_name, segment:r.segment, biSubCategory:r.bi_subcategory,
+        fmcManaged:!!r.fmc_managed, fmcName:r.fmc_name, stage:r.stage, status:r.status || "active",
+        annualVolume:r.annual_volume || 0,
+        address:r.address||"", city:r.city||"", state:r.state||"", zip:r.zip||"",
+        primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"",
+        nextStep:r.next_step||"", nextStepDate:r.next_step_date||"",
+        wonDate:r.won_date||"", lostReason:r.lost_reason||"", lostDate:r.lost_date||"",
+        lastTouch:r.last_touch || todayStr(), ownerId:r.owner_id,
+        createdAt:r.created_at, updatedAt:r.updated_at,
+        photos:[], activity:[],
+      };
+    }
 
     /* ====================================================== DATA ACCESS */
-    function getAccounts()        { return accounts; }
-    function getAccount(id)       { return accounts.find(a => a.id === id); }
-    function addAccount(account)  { accounts.push(account); }
-    function updateAccount(id, c) { const a = getAccount(id); if (a) Object.assign(a, c, { updatedAt: new Date().toISOString() }); }
-    function deleteAccount(id)    { accounts = accounts.filter(a => a.id !== id); }
+    // Reads are synchronous — they hit the local cache, so the UI stays instant.
+    function getAccounts()  { return accounts; }
+    function getAccount(id) { return accounts.find(a => a.id === id); }
+
+    // Writes are async — they go to Supabase first, then update the cache, so the
+    // screen and the database never disagree. Each returns the saved record (or
+    // null/false on failure) so the caller knows whether to proceed.
+    async function loadAccounts() {
+      const { data, error } = await sb.from("accounts").select("*").order("created_at", { ascending:false });
+      if (error) { console.error("loadAccounts:", error.message); accounts = []; return; }
+      accounts = (data || []).map(rowToAccount);
+    }
+    async function addAccount(account) {
+      const { data, error } = await sb.from("accounts").insert(accountToRow(account)).select().single();
+      if (error) { alert("Couldn't save account: " + error.message); return null; }
+      const saved = rowToAccount(data);
+      accounts.unshift(saved);
+      return saved;
+    }
+    async function updateAccount(id, changes) {
+      const { data, error } = await sb.from("accounts").update(accountToRow(changes)).eq("id", id).select().single();
+      if (error) { alert("Couldn't update account: " + error.message); return null; }
+      const saved = rowToAccount(data);
+      const i = accounts.findIndex(a => a.id === id);
+      // Keep the in-memory-only fields (photos, activity) through the refresh.
+      if (i >= 0) { saved.photos = accounts[i].photos; saved.activity = accounts[i].activity; accounts[i] = saved; }
+      else accounts.push(saved);
+      return saved;
+    }
+    async function deleteAccount(id) {
+      const { error } = await sb.from("accounts").delete().eq("id", id);
+      if (error) { alert("Couldn't delete account: " + error.message); return false; }
+      accounts = accounts.filter(a => a.id !== id);
+      return true;
+    }
 
     // Who sees what: manager sees all; a rep sees only their own.
     function visibleAccounts() {
@@ -369,23 +402,6 @@
         return true;
       });
     }
-
-    // Demo seeds so the new features have something to show.
-    Object.assign(getAccount("acc_001"), { stage:5, wonDate:"2026-05-09", annualVolume:9000 });
-    Object.assign(getAccount("acc_005"), { wonDate:"2026-04-18", annualVolume:4200 });
-    getAccount("acc_004").annualVolume = 2500;
-    getAccount("acc_003").annualVolume = 1800;
-    Object.assign(getAccount("acc_006"), { status:"lost", lostReason:"Lost bid to incumbent vendor", lostDate:"2026-05-30" });
-    Object.assign(getAccount("acc_003"), { nextStep:"Send pricing proposal", nextStepDate:"2026-06-20" });
-    Object.assign(getAccount("acc_004"), { nextStep:"Schedule field test", nextStepDate:"2026-06-10" });
-    getAccount("acc_003").activity = [
-      { id:"n1", date:"2026-06-02", text:"Intro call with foodservice director — strong interest." },
-      { id:"n2", date:"2026-06-09", text:"Sent product samples; positive response from the team." },
-    ];
-    // last-touch seeds: acc_002 and acc_004 go stale (>2 weeks), acc_003 stays fresh.
-    getAccount("acc_002").lastTouch = "2026-05-20";
-    getAccount("acc_003").lastTouch = "2026-06-09";
-    getAccount("acc_004").lastTouch = "2026-05-28";
 
     /* ===================================================== CALL POINTS */
     // A rep's full book of accounts they service and call on — separate from
@@ -771,7 +787,7 @@
     }
 
     /* ========================================================= ACTIONS */
-    function saveForm() {
+    async function saveForm() {
       const v = id => document.getElementById(id).value;
       const name = v("f-name").trim();
       const segment = v("f-segment");
@@ -795,7 +811,6 @@
         address:v("f-address").trim(), city:v("f-city").trim(),
         state:v("f-state").trim(), zip:v("f-zip").trim(),
         primaryContact:v("f-contact").trim(), phone:v("f-phone").trim(), email:v("f-email").trim(),
-        ownerId: isManager() ? v("f-owner") : currentUser.repId,
       };
 
       // Auto-stamp won/lost dates the first time they happen.
@@ -809,11 +824,15 @@
       if (existing && data.stage !== existing.stage) data.lastTouch = todayStr();
 
       if (state.editingId) {
-        updateAccount(state.editingId, data);
+        const ok = await updateAccount(state.editingId, data);
+        if (!ok) return;                        // error already shown; stay on the form
         state.selectedId = state.editingId; state.view = "detail";
       } else {
-        const now = new Date().toISOString();
-        addAccount(Object.assign({ id:"acc_"+Date.now(), createdAt:now, updatedAt:now, photos:[], activity:[], lastTouch:todayStr() }, data));
+        data.lastTouch = todayStr();
+        // New accounts are owned by their creator. The manager-assigns-to-a-rep
+        // picker returns once the rest of the team has real logins.
+        const saved = await addAccount(Object.assign({ ownerId: currentUser.id }, data));
+        if (!saved) return;
         state.view = "list";
       }
       state.editingId = null;
@@ -1100,6 +1119,7 @@
       const { data, error } = await sb.from("profiles").select("*").eq("id", userId).single();
       if (error || !data) { renderLogin("Signed in, but no profile exists for this account yet."); return; }
       currentUser = profileToUser(data);
+      await loadAccounts();
       state.view = "home";
       render();
     }
@@ -1117,6 +1137,7 @@
     async function doLogout() {
       await sb.auth.signOut();
       currentUser = null;
+      accounts = [];
       renderLogin();
     }
 
@@ -1164,8 +1185,10 @@
       else if (action === "save")         { saveForm(); }
       else if (action === "delete")       {
         if (confirm("Delete this account permanently? This can't be undone.")) {
-          deleteAccount(state.editingId || state.selectedId);
-          state.editingId = null; state.selectedId = null; state.view = "list"; render();
+          deleteAccount(state.editingId || state.selectedId).then(ok => {
+            if (!ok) return;
+            state.editingId = null; state.selectedId = null; state.view = "list"; render();
+          });
         }
       }
       else if (action === "cancel-form")  { state.view = state.editingId ? "detail" : "list"; state.selectedId = state.editingId || state.selectedId; state.editingId = null; render(); }
