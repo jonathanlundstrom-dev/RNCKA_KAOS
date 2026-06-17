@@ -314,6 +314,7 @@
       primaryContact:"primary_contact", phone:"phone", email:"email",
       nextStep:"next_step", nextStepDate:"next_step_date", wonDate:"won_date",
       lostReason:"lost_reason", lostDate:"lost_date", lastTouch:"last_touch", ownerId:"owner_id",
+      photos:"photos",
     };
     // App object → database row. Only maps keys that are actually present, so the
     // same function serves a full insert and a partial update. Empty strings
@@ -349,7 +350,7 @@
         wonDate:r.won_date||"", lostReason:r.lost_reason||"", lostDate:r.lost_date||"",
         lastTouch:r.last_touch || todayStr(), ownerId:r.owner_id,
         createdAt:r.created_at, updatedAt:r.updated_at,
-        photos:[], activity: activityRowsToItems(r.account_activity),
+        photos: r.photos || [], activity: activityRowsToItems(r.account_activity),
       };
     }
 
@@ -378,8 +379,9 @@
       if (error) { alert("Couldn't update account: " + error.message); return null; }
       const saved = rowToAccount(data);
       const i = accounts.findIndex(a => a.id === id);
-      // Keep the in-memory-only fields (photos, activity) through the refresh.
-      if (i >= 0) { saved.photos = accounts[i].photos; saved.activity = accounts[i].activity; accounts[i] = saved; }
+      // activity lives in its own table (not returned by this update), so keep
+      // the cached copy; photos come back with the row, so the fresh value wins.
+      if (i >= 0) { saved.activity = accounts[i].activity; accounts[i] = saved; }
       else accounts.push(saved);
       return saved;
     }
@@ -421,6 +423,7 @@
       address:"address", city:"city", state:"state", zip:"zip",
       primaryContact:"primary_contact", phone:"phone", email:"email",
       lastCall:"last_call", ownerId:"owner_id",
+      photos:"photos",
     };
     function callPointToRow(obj) {
       const row = {};
@@ -447,7 +450,7 @@
         primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"",
         lastCall:r.last_call||"", ownerId:r.owner_id,
         createdAt:r.created_at, updatedAt:r.updated_at,
-        photos:[], calls: callLogRowsToItems(r.call_logs),
+        photos: r.photos || [], calls: callLogRowsToItems(r.call_logs),
       };
     }
 
@@ -470,7 +473,7 @@
       if (error) { alert("Couldn't update call point: " + error.message); return null; }
       const saved = rowToCallPoint(data);
       const i = callPoints.findIndex(c => c.id === id);
-      if (i >= 0) { saved.photos = callPoints[i].photos; saved.calls = callPoints[i].calls; callPoints[i] = saved; }
+      if (i >= 0) { saved.calls = callPoints[i].calls; callPoints[i] = saved; }
       else callPoints.push(saved);
       return saved;
     }
@@ -1264,8 +1267,13 @@
       else if (action === "add-photo")    { document.getElementById("photo-input").click(); }
       else if (action === "del-photo")    {
         const acct = getAccount(el.dataset.id);
-        if (acct) acct.photos = acct.photos.filter(p => p.id !== el.dataset.photo);
-        render();
+        if (!acct) return;
+        const photo = acct.photos.find(p => p.id === el.dataset.photo);
+        const remaining = acct.photos.filter(p => p.id !== el.dataset.photo);
+        updateAccount(acct.id, { photos:remaining }).then(() => {
+          if (photo && photo.path) sb.storage.from("photos").remove([photo.path]);
+          render();
+        });
       }
       else if (action === "tab-callpoints") { state.view = "callpoints"; state.cpId = null; render(); }
       else if (action === "cp-add")         { state.cpEditId = null; state.view = "cp-form"; render(); }
@@ -1287,8 +1295,13 @@
       else if (action === "cp-add-photo")    { document.getElementById("cp-photo-input").click(); }
       else if (action === "cp-del-photo")    {
         const cp = getCallPoint(el.dataset.id);
-        if (cp) cp.photos = cp.photos.filter(p => p.id !== el.dataset.photo);
-        render();
+        if (!cp) return;
+        const photo = cp.photos.find(p => p.id === el.dataset.photo);
+        const remaining = cp.photos.filter(p => p.id !== el.dataset.photo);
+        updateCallPoint(cp.id, { photos:remaining }).then(() => {
+          if (photo && photo.path) sb.storage.from("photos").remove([photo.path]);
+          render();
+        });
       }
     });
 
@@ -1302,6 +1315,58 @@
       if (e.target.id === "flt-search") { state.filters.search = e.target.value; renderResults(); }
       if (e.target.id === "cp-search")  { state.cpSearch = e.target.value; renderCpResults(); }
     });
+
+    // ===== PHOTOS (Supabase Storage) =========================================
+    // Shrink an image in the browser before upload so files stay small (~200 KB)
+    // rather than multi-megabyte phone originals. Draws the photo onto a canvas
+    // at reduced size and hands back a JPEG blob.
+    function resizeImage(file, maxDim = 1280, quality = 0.82) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = reject;
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = reject;
+          img.onload = () => {
+            let { width, height } = img;
+            if (Math.max(width, height) > maxDim) {
+              const scale = maxDim / Math.max(width, height);
+              width = Math.round(width * scale); height = Math.round(height * scale);
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width; canvas.height = height;
+            canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+            canvas.toBlob(b => b ? resolve(b) : reject(new Error("processing failed")), "image/jpeg", quality);
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    // Upload one resized blob to the photos bucket; returns the {id,path,url}
+    // record we store on the row, or null on failure.
+    async function uploadPhoto(folder, ownerId, blob) {
+      const photoId = "ph_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+      const path = folder + "/" + ownerId + "/" + photoId + ".jpg";
+      const { error } = await sb.storage.from("photos").upload(path, blob, { contentType:"image/jpeg" });
+      if (error) { alert("Couldn't upload photo: " + error.message); return null; }
+      const url = sb.storage.from("photos").getPublicUrl(path).data.publicUrl;
+      return { id:photoId, path, url };
+    }
+    // Resize + upload each picked file, then persist the combined list via the
+    // record's own update function (passed in as `save`).
+    async function attachPhotos(files, current, folder, ownerId, save) {
+      const added = [];
+      for (const file of files) {
+        const blob = await resizeImage(file).catch(() => null);
+        if (!blob) { alert("Couldn't process one of the images."); continue; }
+        const photo = await uploadPhoto(folder, ownerId, blob);
+        if (photo) added.push(photo);
+      }
+      if (!added.length) return;
+      await save([...current, ...added]);
+      render();
+    }
 
     app.addEventListener("change", (e) => {
       const id = e.target.id;
@@ -1327,27 +1392,15 @@
       if (id === "photo-input") {
         const acct = getAccount(state.selectedId);
         if (!acct) return;
-        Array.from(e.target.files || []).forEach(file => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            acct.photos.push({ id:"ph_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), url:reader.result });
-            render();
-          };
-          reader.readAsDataURL(file);
-        });
+        const files = Array.from(e.target.files || []);
+        if (files.length) attachPhotos(files, acct.photos, "accounts", acct.id, arr => updateAccount(acct.id, { photos:arr }));
       }
       if (id === "cp-fmc") document.getElementById("cp-field-fmcname").classList.toggle("hidden", e.target.value !== "yes");
       if (id === "cp-photo-input") {
         const cp = getCallPoint(state.cpId);
         if (!cp) return;
-        Array.from(e.target.files || []).forEach(file => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            cp.photos.push({ id:"ph_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), url:reader.result });
-            render();
-          };
-          reader.readAsDataURL(file);
-        });
+        const files = Array.from(e.target.files || []);
+        if (files.length) attachPhotos(files, cp.photos, "callpoints", cp.id, arr => updateCallPoint(cp.id, { photos:arr }));
       }
     });
 
