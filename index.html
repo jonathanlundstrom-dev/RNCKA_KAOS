@@ -232,34 +232,35 @@
       4:"Field Test & Approval", 5:"Implementation / Account Won",
     };
     const STAGE_COLORS = { 1:"#D64545", 2:"#E1833C", 3:"#F0C419", 4:"#7FB85C", 5:"#2E8B57" };
-    const REPS = {
-      rep_aquinet:  { name:"Amy Quinet",      region:"West" },
-      rep_kbraidic: { name:"Kendall Braidic",  region:"West" },
-      rep_knaviaux: { name:"Katie Naviaux",    region:"Central" },
-      rep_sford:    { name:"Sierra Ford",      region:"Central" },
-      rep_mflom:    { name:"Meg Flom",         region:"Midwest" },
-      rep_rwagner:  { name:"Rudy Wagner",      region:"Midwest" },
-      rep_tmcgowan: { name:"TJ Mcgowan",       region:"Midwest" },
-      rep_mrenno:   { name:"Montana Renno",    region:"Northeast" },
-      rep_ctrott:   { name:"Chris Trott",      region:"Northeast" },
-      rep_gdrillock:{ name:"Greg Drillock",    region:"Northeast" },
-      rep_cjenkins: { name:"Carroll Jenkins",  region:"Southeast" },
-      rep_jqueja:   { name:"Josh Queja",       region:"Southeast" },
-    };
-    // Managers have full access: all accounts, the Team view, edit/reassign anything.
-    const MANAGERS = {
-      mgr_jonathan:  { name:"Jonathan Lundstrom", title:"Director" },
-      mgr_dbuccheit: { name:"Dylan Buccheit", title:"Senior Manager" },
-    };
-    function repName(id)   { return REPS[id] ? REPS[id].name   : "Unassigned"; }
-    function repRegion(id) { return REPS[id] ? REPS[id].region : "—"; }
-    // Rep <option>s grouped under region headers — cleaner than "name — region" on every line.
+    // The team is loaded from the profiles table after login (see loadPeople).
+    // Each entry: { id, name, role, region, title }. This replaces the old
+    // hardcoded lists so the app always reflects who's really in the system.
+    let people = [];
+    function personById(id) { return people.find(p => p.id === id); }
+    function repName(id)   { const p = personById(id); return p ? p.name : "Unassigned"; }
+    function repRegion(id) { const p = personById(id); return p && p.region ? p.region : "—"; }
+    // Owner <option>s grouped under headers: Managers first, then reps by region.
     function repOptionsGrouped(selectedId) {
-      return REGIONS.map(r => {
-        const opts = Object.keys(REPS).filter(id => REPS[id].region === r)
-          .map(id => '<option value="'+id+'"'+(id===selectedId?' selected':'')+'>'+REPS[id].name+'</option>').join("");
-        return '<optgroup label="'+r+'">'+opts+'</optgroup>';
+      const sel = id => (id === selectedId ? " selected" : "");
+      const mgrs = people.filter(p => p.role === "manager")
+        .map(p => '<option value="'+p.id+'"'+sel(p.id)+'>'+esc(p.name)+'</option>').join("");
+      const mgrGroup = mgrs ? '<optgroup label="Managers">'+mgrs+'</optgroup>' : "";
+      const repGroups = REGIONS.map(r => {
+        const opts = people.filter(p => p.role === "rep" && p.region === r)
+          .map(p => '<option value="'+p.id+'"'+sel(p.id)+'>'+esc(p.name)+'</option>').join("");
+        return opts ? '<optgroup label="'+r+'">'+opts+'</optgroup>' : "";
       }).join("");
+      return mgrGroup + repGroups;
+    }
+    // Flat owner <option>s for the filter dropdowns.
+    function ownerOptionsFlat(selectedId) {
+      return people.map(p => '<option value="'+p.id+'"'+(p.id===selectedId?" selected":"")+'>'+esc(p.name)+'</option>').join("");
+    }
+    // Load the whole team from the database (everyone can read profiles).
+    async function loadPeople() {
+      const { data, error } = await sb.from("profiles").select("*");
+      if (error) { console.error("loadPeople:", error.message); people = []; return; }
+      people = (data || []).map(p => ({ id:p.id, name:p.full_name, role:p.role, region:p.region, title:p.title }));
     }
     function fmtDate(d)    { return d ? new Date(d+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) : ""; }
     function todayStr()    { return new Date().toISOString().slice(0,10); }
@@ -599,8 +600,7 @@
       if (isManager()) {
         const regionOpts = '<option value="">All regions</option>' + REGIONS.map(r =>
           '<option value="'+r+'"'+(f.region===r?' selected':'')+'>'+r+'</option>').join("");
-        const ownerOpts = '<option value="">All reps</option>' + Object.keys(REPS).map(id =>
-          '<option value="'+id+'"'+(f.owner===id?' selected':'')+'>'+REPS[id].name+'</option>').join("");
+        const ownerOpts = '<option value="">All owners</option>' + ownerOptionsFlat(f.owner);
         mgrFilters = '<select id="flt-region" class="filt">'+regionOpts+'</select>'
                    + '<select id="flt-owner" class="filt">'+ownerOpts+'</select>';
       }
@@ -638,16 +638,19 @@
     function teamView() {
       let html = '<h2 class="toolbar-title" style="margin-bottom:14px">Team — all regions</h2>';
       REGIONS.forEach(region => {
-        const ids = Object.keys(REPS).filter(id => REPS[id].region === region);
+        const reps = people.filter(p => p.role === "rep" && p.region === region);
+        if (!reps.length) return;
         html += '<div class="team-region"><div class="region-head">'+region+'</div>';
-        ids.forEach(id => {
-          const owned = getAccounts().filter(a => a.ownerId === id && a.status !== "lost");
+        reps.forEach(p => {
+          const owned = getAccounts().filter(a => a.ownerId === p.id && a.status !== "lost");
           const won = owned.filter(a => a.stage === 5).length;
-          html += '<div class="rep-row"><span class="rep-name">'+REPS[id].name+'</span>'
+          html += '<div class="rep-row"><span class="rep-name">'+esc(p.name)+'</span>'
                 + '<span class="rep-stats">'+owned.length+' active · '+won+' won</span></div>';
         });
         html += '</div>';
       });
+      const anyReps = people.some(p => p.role === "rep");
+      if (!anyReps) html += '<p style="color:var(--muted)">No reps added yet.</p>';
       return html;
     }
 
@@ -763,7 +766,7 @@
       const isEdit   = !!account;
       const curStage = account ? String(account.stage) : "1";
       const curFmc   = account ? (account.fmcManaged ? "yes" : "no") : "";
-      const curOwner = account ? account.ownerId : Object.keys(REPS)[0];
+      const curOwner = account ? account.ownerId : currentUser.id;
       const curStatus= account ? account.status : "active";
 
       const segOpts   = '<option value="">— Select —</option>' + optList(SEGMENTS, g("segment"));
@@ -864,15 +867,17 @@
       // A stage change counts as an interaction — reset the "needs updating" clock.
       if (existing && data.stage !== existing.stage) data.lastTouch = todayStr();
 
+      // Owner: a manager assigns via the picker; a rep always owns their own.
+      // Included on edits too, so a manager can reassign an account to a rep.
+      data.ownerId = isManager() ? document.getElementById("f-owner").value : currentUser.id;
+
       if (state.editingId) {
         const ok = await updateAccount(state.editingId, data);
         if (!ok) return;                        // error already shown; stay on the form
         state.selectedId = state.editingId; state.view = "detail";
       } else {
         data.lastTouch = todayStr();
-        // New accounts are owned by their creator. The manager-assigns-to-a-rep
-        // picker returns once the rest of the team has real logins.
-        const saved = await addAccount(Object.assign({ ownerId: currentUser.id }, data));
+        const saved = await addAccount(data);
         if (!saved) return;
         state.view = "list";
       }
@@ -926,8 +931,7 @@
       if (isManager()) {
         const regionOpts = '<option value="">All regions</option>' + REGIONS.map(r =>
           '<option value="'+r+'"'+(state.cpRegion===r?' selected':'')+'>'+r+'</option>').join("");
-        const ownerOpts = '<option value="">All reps</option>' + Object.keys(REPS).map(id =>
-          '<option value="'+id+'"'+(state.cpOwner===id?' selected':'')+'>'+REPS[id].name+'</option>').join("");
+        const ownerOpts = '<option value="">All owners</option>' + ownerOptionsFlat(state.cpOwner);
         mgrFilters = '<select id="cpf-region" class="filt">'+regionOpts+'</select>'
                    + '<select id="cpf-owner" class="filt">'+ownerOpts+'</select>';
       }
@@ -1021,7 +1025,7 @@
       const optList = (list, cur) => list.map(x => '<option value="'+x+'"'+(x===cur?' selected':'')+'>'+x+'</option>').join("");
       const isEdit = !!cp;
       const curFmc = cp ? (cp.fmcManaged ? "yes" : "no") : "";
-      const curOwner = cp ? cp.ownerId : Object.keys(REPS)[0];
+      const curOwner = cp ? cp.ownerId : currentUser.id;
       const segOpts = '<option value="">— Select —</option>' + optList(SEGMENTS, g("segment"));
       const fmcOpts = '<option value="">— Select —</option>' + optList(FMCS, g("fmcName"));
       const ownerOpts = repOptionsGrouped(curOwner);
@@ -1078,12 +1082,15 @@
         state:v("cp-state").trim(), zip:v("cp-zip").trim(),
         primaryContact:v("cp-contact").trim(), phone:v("cp-phone").trim(), email:v("cp-email").trim(),
       };
+      // Owner: manager assigns via picker; rep owns their own. On edits too, so
+      // a manager can reassign.
+      data.ownerId = isManager() ? document.getElementById("cp-owner").value : currentUser.id;
       if (state.cpEditId) {
         const ok = await updateCallPoint(state.cpEditId, data);
         if (!ok) return;
         state.cpId = state.cpEditId; state.view = "cp-detail";
       } else {
-        const saved = await addCallPoint(Object.assign({ ownerId: currentUser.id }, data));
+        const saved = await addCallPoint(data);
         if (!saved) return;
         state.view = "callpoints";
       }
@@ -1177,8 +1184,8 @@
       const { data, error } = await sb.from("profiles").select("*").eq("id", userId).single();
       if (error || !data) { renderLogin("Signed in, but no profile exists for this account yet."); return; }
       currentUser = profileToUser(data);
-      // Both loads are independent, so run them at the same time.
-      await Promise.all([loadAccounts(), loadCallPoints()]);
+      // Independent loads — run them together.
+      await Promise.all([loadAccounts(), loadCallPoints(), loadPeople()]);
       state.view = "home";
       render();
     }
@@ -1198,6 +1205,7 @@
       currentUser = null;
       accounts = [];
       callPoints = [];
+      people = [];
       renderLogin();
     }
 
