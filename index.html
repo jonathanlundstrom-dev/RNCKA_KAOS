@@ -1383,9 +1383,13 @@
         (async () => {
           const blob = await resizeImage(file, 512, 0.85).catch(() => null);  // smaller — it's a thumbnail
           if (!blob) { alert("Couldn't process that image."); return; }
-          // Fixed path per user + upsert = one avatar file each, no orphans.
+          // Clear any previous avatar, then upload fresh. We avoid `upsert` here:
+          // it compiles to an "insert-or-update" that needs a read policy we
+          // don't grant. A plain delete-then-insert uses the same permissions
+          // your account photos already use, so it just works.
           const path = "avatars/" + currentUser.id + ".jpg";
-          const { error } = await sb.storage.from("photos").upload(path, blob, { contentType:"image/jpeg", upsert:true });
+          await sb.storage.from("photos").remove([path]);
+          const { error } = await sb.storage.from("photos").upload(path, blob, { contentType:"image/jpeg" });
           if (error) { alert("Couldn't upload avatar: " + error.message); return; }
           // The path is fixed, so add a timestamp to the URL to dodge the cache.
           const url = sb.storage.from("photos").getPublicUrl(path).data.publicUrl + "?t=" + Date.now();
