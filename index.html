@@ -200,6 +200,48 @@
     .login-input:focus { outline:none; border-color:var(--navy); }
     .login-btn { width:100%; margin-top:20px; }
     .login-error { min-height:1.1em; margin-top:12px; font-size:0.82rem; color:var(--red); text-align:center; }
+    /* Manager dashboard */
+    .dash-region-row { margin-bottom:14px; }
+    .dash-region-row .filt { width:100%; }
+    .dash-tiles { margin-bottom:8px; }
+    .dash-sub { font-size:0.82rem; color:var(--muted); margin:0 0 18px; }
+    .dash-sub b { color:var(--ink); }
+    .dash-card { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:18px; }
+    .stage-legend { display:flex; flex-direction:column; gap:5px; margin-top:12px; font-size:0.7rem; color:var(--muted); }
+    .stage-legend span { display:inline-flex; align-items:center; gap:7px; }
+    .stage-legend i { width:10px; height:10px; border-radius:2px; display:inline-block; flex:none; }
+    .rep-stats { padding:0; }
+    .rep-stat-row { display:flex; flex-direction:column; gap:5px; padding:12px 16px; border-bottom:1px solid var(--line); }
+    .rep-stat-row:last-child { border-bottom:none; }
+    .rep-stat-name { font-weight:700; color:var(--ink); font-size:0.9rem; }
+    .rep-stat-region { font-weight:500; color:var(--muted); font-size:0.72rem; margin-left:8px; }
+    .rep-stat-cells { display:flex; flex-wrap:wrap; gap:5px 16px; font-size:0.8rem; color:var(--muted); }
+    .rep-stat-cells b { color:var(--ink); }
+    .rep-stat-cells .rep-overdue b { color:var(--red); }
+    .rep-stat-empty { padding:18px 16px; text-align:center; color:var(--muted); font-size:0.85rem; }
+    /* Dashboard filters + horizontal bars */
+    .dash-filters { display:flex; flex-direction:column; gap:14px; margin-bottom:16px; }
+    .dash-filters .filt { width:100%; box-sizing:border-box; }
+    .dash-reps-lbl { display:flex; align-items:center; justify-content:space-between; font-size:0.72rem;
+                     font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:6px; }
+    #dash-reps { padding:6px; height:auto; }
+    .rep-checks { display:flex; flex-wrap:wrap; gap:8px; }
+    .rep-check { display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border:1px solid var(--line);
+                 border-radius:20px; font-size:0.8rem; cursor:pointer; background:#fff; color:var(--ink); user-select:none; }
+    .rep-check input { margin:0; accent-color:var(--navy); cursor:pointer; }
+    .rep-check:has(input:checked) { background:var(--navy); color:#fff; border-color:var(--navy); }
+    .rep-check:has(input:checked) input { accent-color:#fff; }
+    .dash-hint { font-size:0.68rem; color:var(--muted); margin-top:5px; }
+    .dash-clear { padding:3px 10px; font-size:0.7rem; text-transform:none; letter-spacing:0; }
+    .hbar { margin-bottom:12px; }
+    .hbar:last-child { margin-bottom:0; }
+    .hbar-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; }
+    .hbar-name { font-size:0.76rem; color:var(--ink); font-weight:600; }
+    .hbar-num { font-size:0.82rem; font-weight:700; color:var(--ink); }
+    .hbar-track { background:#eef1f6; border-radius:5px; height:14px; overflow:hidden; }
+    .hbar-fill { height:100%; border-radius:5px; min-width:3px; }
+    .dash-total { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); font-size:0.8rem;
+                  font-weight:700; color:var(--ink); text-align:center; }
   </style>
 </head>
 
@@ -223,7 +265,7 @@
     const SUPABASE_ANON_KEY = "sb_publishable_X6Xvz0GUfHndHsUxOZgfyw_7y2m2h2M";
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness"];
+    const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     const BI_SUBCATEGORIES = ["White Collar", "Blue Collar"];
     const FMCS = ["Aramark", "Sodexo", "Compass Group", "Other"];
     const REGIONS = ["West", "Central", "Midwest", "Northeast", "Southeast"];
@@ -309,7 +351,7 @@
     // speaks camelCase. These two functions are the one place that knows both.
     const ACCOUNT_FIELDS = {
       accountName:"account_name", segment:"segment", biSubCategory:"bi_subcategory",
-      fmcManaged:"fmc_managed", fmcName:"fmc_name", stage:"stage", status:"status",
+      fmcManaged:"fmc_managed", fmcName:"fmc_name", sectorLob:"sector_lob", stage:"stage", status:"status",
       annualVolume:"annual_volume", address:"address", city:"city", state:"state", zip:"zip",
       primaryContact:"primary_contact", phone:"phone", email:"email",
       nextStep:"next_step", nextStepDate:"next_step_date", wonDate:"won_date",
@@ -342,7 +384,7 @@
     function rowToAccount(r) {
       return {
         id:r.id, accountName:r.account_name, segment:r.segment, biSubCategory:r.bi_subcategory,
-        fmcManaged:!!r.fmc_managed, fmcName:r.fmc_name, stage:r.stage, status:r.status || "active",
+        fmcManaged:!!r.fmc_managed, fmcName:r.fmc_name, sectorLob:r.sector_lob||"", stage:r.stage, status:r.status || "active",
         annualVolume:r.annual_volume || 0,
         address:r.address||"", city:r.city||"", state:r.state||"", zip:r.zip||"",
         primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"",
@@ -492,7 +534,7 @@
     const DEFAULT_FILTERS = { search:"", stage:"", segment:"", region:"", owner:"", status:"active", stale:false };
     const state = { view:"home", selectedId:null, editingId:null, filters:{ ...DEFAULT_FILTERS },
                     cpId:null, cpEditId:null, cpSearch:"", cpStale:false,
-                    cpSegment:"", cpRegion:"", cpOwner:"" };
+                    cpSegment:"", cpRegion:"", cpOwner:"", dashRegion:"", dashReps:[], dashSegment:"" };
 
     /* =========================================================== VIEWS */
     function ring(pct, label, color) {
@@ -504,6 +546,74 @@
         +   'stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 42 42)"/>'
         + '<text x="42" y="47" text-anchor="middle" class="ring-pct">'+pct+'%</text>'
         + '</svg><div class="ring-label">'+label+'</div></div>';
+    }
+
+    // The manager-only performance dashboard on the home screen. Everything
+    // recomputes from the current data and the chosen region, so it's always live.
+    function managerDashboard() {
+      const region   = state.dashRegion  || "";
+      const segment  = state.dashSegment || "";
+      const selected = state.dashReps    || [];
+      const repPool = people.filter(p => p.role === "rep" && (!region || p.region === region))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      // Selected reps win if any are checked; otherwise fall back to the region.
+      const ownerMatch = ownerId => selected.length
+        ? selected.includes(ownerId)
+        : (!region || repRegion(ownerId) === region);
+
+      // Active pipeline, filtered by rep/region and segment.
+      const active = getAccounts().filter(a =>
+        a.status !== "lost" && ownerMatch(a.ownerId) && (!segment || a.segment === segment));
+
+      const regionOpts = '<option value="">All regions</option>' + REGIONS.map(r =>
+        '<option value="'+r+'"'+(region===r?' selected':'')+'>'+r+'</option>').join("");
+      const segOpts = '<option value="">All segments</option>' + SEGMENTS.map(s =>
+        '<option value="'+s+'"'+(segment===s?' selected':'')+'>'+s+'</option>').join("");
+      const repChecks = repPool.map(p =>
+        '<label class="rep-check"><input type="checkbox" class="dash-rep-cb" value="'+p.id+'"'+(selected.includes(p.id)?' checked':'')+'> '+esc(p.name)+'</label>').join("");
+      const repClear = selected.length
+        ? '<button class="btn btn-ghost dash-clear" data-action="dash-clear-reps">Clear ('+selected.length+')</button>' : "";
+
+      return ''
+        + '<div class="section-label">Pipeline by stage</div>'
+        + '<div class="dash-filters">'
+        +   '<select id="dash-region" class="filt">'+regionOpts+'</select>'
+        +   '<select id="dash-segment" class="filt">'+segOpts+'</select>'
+        +   '<div class="dash-reps-row"><label class="dash-reps-lbl"><span>Isolate reps</span>'+repClear+'</label>'
+        +     '<div class="rep-checks">'+repChecks+'</div>'
+        +     '<div class="dash-hint">Check one or more · none checked = all</div></div>'
+        + '</div>'
+        + pipelineBars(active);
+    }
+
+    // Shared horizontal pipeline-by-stage chart for any set of active accounts.
+    function pipelineBars(active) {
+      const byStage = [1,2,3,4,5].map(s => active.filter(a => a.stage === s).length);
+      const maxCount = Math.max(1, ...byStage);
+      const total = byStage.reduce((a, b) => a + b, 0);
+      let barsHtml = "";
+      [1,2,3,4,5].forEach((s, i) => {
+        const cnt = byStage[i];
+        const pct = Math.round(cnt / maxCount * 100);
+        barsHtml += '<div class="hbar">'
+          + '<div class="hbar-head"><span class="hbar-name">'+s+' · '+STAGES[s]+'</span><span class="hbar-num">'+cnt+'</span></div>'
+          + '<div class="hbar-track"><div class="hbar-fill" style="width:'+pct+'%;background:'+STAGE_COLORS[s]+'"></div></div>'
+          + '</div>';
+      });
+      return '<div class="dash-card">'+barsHtml+'<div class="dash-total">'+total+' active opportunities</div></div>';
+    }
+
+    // Rep home dashboard: their own pipeline (RLS already scopes the data to them),
+    // with just a segment filter — region and rep-isolation don't apply to one rep.
+    function repDashboard() {
+      const segment = state.dashSegment || "";
+      const active = getAccounts().filter(a => a.status !== "lost" && (!segment || a.segment === segment));
+      const segOpts = '<option value="">All segments</option>' + SEGMENTS.map(s =>
+        '<option value="'+s+'"'+(segment===s?' selected':'')+'>'+s+'</option>').join("");
+      return ''
+        + '<div class="section-label">My pipeline by stage</div>'
+        + '<div class="dash-filters"><select id="dash-segment" class="filt">'+segOpts+'</select></div>'
+        + pipelineBars(active);
     }
 
     function landingView() {
@@ -519,9 +629,6 @@
       const lost = accts.filter(a => a.status === "lost").length;
       const cps = visibleCallPoints();
       const callsDue = cps.filter(needsCall).length;
-      const closed = wins + active + lost;
-      const winRate = closed ? (wins / closed * 100) : 0;
-      const callCoverage = cps.length ? ((cps.length - callsDue) / cps.length * 100) : 100;
 
       return ''
         + '<div class="profile-cover"></div>'
@@ -543,11 +650,10 @@
         + '</div>'
         + '<div class="section-label">Quick actions</div>'
         + '<div class="quick">'
-        +   '<button class="btn btn-ghost" data-action="add">+ New account</button>'
-        +   '<button class="btn btn-ghost" data-action="cp-add">+ New call point</button>'
+        +   '<button class="btn btn-ghost" data-action="add">+ New Pipeline Account</button>'
+        +   '<button class="btn btn-ghost" data-action="cp-add">+ New Call Point</button>'
         + '</div>'
-        + '<div class="section-label">Performance</div>'
-        + '<div class="rings">'+ring(winRate, "Win rate", "#2E8B57")+ring(callCoverage, "Call coverage", "#0B2545")+'</div>';
+        + (isManager() ? managerDashboard() : repDashboard());
     }
 
     function accountCard(a) {
@@ -744,6 +850,7 @@
         + '<div class="detail-rows">'
         +   row("Segment", a.segment) + row("B&I sub-category", a.biSubCategory)
         +   row("FMC managed", a.fmcManaged ? "Yes" : "No") + row("FMC", esc(a.fmcName))
+        +   (a.fmcManaged ? row("Sector/LOB", esc(a.sectorLob)) : "")
         +   row("Owner", repName(a.ownerId)) + row("Region", repRegion(a.ownerId))
         +   row("Annual volume", a.annualVolume ? a.annualVolume.toLocaleString()+" cases" : "")
         +   (a.stage===5 && a.wonDate ? row("Date won", fmtDate(a.wonDate)) : "")
@@ -769,13 +876,19 @@
 
       const segOpts   = '<option value="">— Select —</option>' + optList(SEGMENTS, g("segment"));
       const subOpts   = '<option value="">— Select —</option>' + optList(BI_SUBCATEGORIES, g("biSubCategory"));
-      const fmcOpts   = '<option value="">— Select —</option>' + optList(FMCS, g("fmcName"));
+      // FMC: a stored name that isn't one of the known companies means "Other" was
+      // used — select Other and pre-fill the free-text box with the saved name.
+      const knownFmcs   = FMCS.filter(f => f !== "Other");
+      const storedFmc   = g("fmcName") || "";
+      const fmcIsOther  = !!storedFmc && !knownFmcs.includes(storedFmc);
+      const fmcOpts   = '<option value="">— Select —</option>' + optList(FMCS, fmcIsOther ? "Other" : storedFmc);
       const stageOpts = Object.keys(STAGES).map(n =>
         '<option value="'+n+'"'+(n===curStage?' selected':'')+'>Stage '+n+' · '+STAGES[n]+'</option>').join("");
       const ownerOpts = repOptionsGrouped(curOwner);
 
       const subHidden  = (account && account.segment === "B&I") ? "" : " hidden";
       const fmcHidden  = (account && account.fmcManaged) ? "" : " hidden";
+      const fmcOtherHidden = (account && account.fmcManaged && fmcIsOther) ? "" : " hidden";
       const lostHidden = (curStatus === "lost") ? "" : " hidden";
       const ownerField = isManager()
         ? '<div class="field"><label>Owner (assign)</label><select id="f-owner">'+ownerOpts+'</select></div>' : "";
@@ -797,6 +910,10 @@
         +   '<option value="yes"'+(curFmc==="yes"?" selected":"")+'>Yes</option>'
         +   '<option value="no"'+(curFmc==="no"?" selected":"")+'>No</option></select></div>'
         + '<div class="field'+fmcHidden+'" id="field-fmcname"><label>FMC</label><select id="f-fmcname">'+fmcOpts+'</select></div>'
+        + '<div class="field'+fmcOtherHidden+'" id="field-fmcother"><label>FMC name (Other)</label>'
+        +   '<input id="f-fmcother" type="text" value="'+esc(fmcIsOther ? storedFmc : "")+'" placeholder="Type the FMC name" /></div>'
+        + '<div class="field'+fmcHidden+'" id="field-sectorlob"><label>Sector/LOB</label>'
+        +   '<input id="f-sectorlob" type="text" value="'+esc(g("sectorLob"))+'" placeholder="Sector/Line of Business" /></div>'
         + '<div class="field"><label>Stage</label><select id="f-stage">'+stageOpts+'</select></div>'
         + '<div class="field"><label>Annual volume (cases)</label>'
         +   '<input id="f-volume" type="number" min="0" value="'+(g("annualVolume")||0)+'" /></div>'
@@ -838,13 +955,18 @@
         return;
       }
       const fmcManaged = v("f-fmc") === "yes";
+      const fmcPicked  = v("f-fmcname");
+      const fmcName = fmcManaged
+        ? (fmcPicked === "Other" ? (v("f-fmcother").trim() || null) : (fmcPicked || null))
+        : null;
       const status = v("f-status") || "active";
       const existing = state.editingId ? getAccount(state.editingId) : null;
 
       const data = {
         accountName: name, segment,
         biSubCategory: segment === "B&I" ? (v("f-subcat") || null) : null,
-        fmcManaged, fmcName: fmcManaged ? (v("f-fmcname") || null) : null,
+        fmcManaged, fmcName,
+        sectorLob: fmcManaged ? (v("f-sectorlob").trim() || null) : null,
         stage: Number(v("f-stage")) || 1,
         annualVolume: Number(v("f-volume")) || 0,
         status,
@@ -1246,6 +1368,7 @@
       const action = el.dataset.action;
       if (action === "login")             { doLogin();  return; }
       else if (action === "logout")       { doLogout(); return; }
+      else if (action === "dash-clear-reps") { state.dashReps = []; render(); return; }
       else if (action === "add")          { state.editingId = null; state.view = "form"; render(); }
       else if (action === "open")         { state.selectedId = el.dataset.id; state.view = "detail"; render(); }
       else if (action === "edit")         { state.editingId = state.selectedId; state.view = "form"; render(); }
@@ -1401,6 +1524,14 @@
         })();
         return;
       }
+      if (id === "dash-region") { state.dashRegion = e.target.value; state.dashReps = []; render(); return; }
+      if (id === "dash-segment"){ state.dashSegment = e.target.value; render(); return; }
+      if (e.target.classList.contains("dash-rep-cb")) {
+        const rid = e.target.value;
+        if (e.target.checked) { if (!state.dashReps.includes(rid)) state.dashReps.push(rid); }
+        else state.dashReps = state.dashReps.filter(x => x !== rid);
+        render(); return;
+      }
       if (id === "flt-stage")   { state.filters.stage = e.target.value;   renderResults(); }
       if (id === "flt-segment") { state.filters.segment = e.target.value; renderResults(); }
       if (id === "flt-region")  { state.filters.region = e.target.value;  renderResults(); }
@@ -1410,7 +1541,12 @@
       if (id === "cpf-region")  { state.cpRegion  = e.target.value; renderCpResults(); }
       if (id === "cpf-owner")   { state.cpOwner   = e.target.value; renderCpResults(); }
       if (id === "f-segment")   document.getElementById("field-subcat").classList.toggle("hidden", e.target.value !== "B&I");
-      if (id === "f-fmc")       document.getElementById("field-fmcname").classList.toggle("hidden", e.target.value !== "yes");
+      if (id === "f-fmc")     { const hide = e.target.value !== "yes";
+                                document.getElementById("field-fmcname").classList.toggle("hidden", hide);
+                                document.getElementById("field-sectorlob").classList.toggle("hidden", hide);
+                                const isOther = document.getElementById("f-fmcname").value === "Other";
+                                document.getElementById("field-fmcother").classList.toggle("hidden", hide || !isOther); }
+      if (id === "f-fmcname")   document.getElementById("field-fmcother").classList.toggle("hidden", e.target.value !== "Other");
       if (id === "f-status")    document.getElementById("field-lostreason").classList.toggle("hidden", e.target.value !== "lost");
       if (id === "photo-input") {
         const acct = getAccount(state.selectedId);
