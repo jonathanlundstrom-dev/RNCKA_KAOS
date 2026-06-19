@@ -154,18 +154,7 @@
             background:#eef1f6; color:var(--muted); }
     .chip.fmc { background:#f3eede; color:#8a6d1f; }
     .chip.lost { background:#f0d9d9; color:#9b2c2c; font-weight:700; }
-    .seg-pill { color:#fff; font-weight:600; }
-
-    /* Segment color legend */
-    .legend { margin-bottom:12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
-    .legend > summary { list-style:none; cursor:pointer; padding:9px 12px; font-size:0.74rem;
-                        font-weight:600; color:var(--navy); display:flex; align-items:center; }
-    .legend > summary::-webkit-details-marker { display:none; }
-    .legend > summary::after { content:"▾"; margin-left:auto; color:var(--muted); font-size:0.7rem; }
-    .legend[open] > summary::after { content:"▴"; }
-    .legend-row { display:flex; flex-wrap:wrap; gap:8px 14px; padding:2px 12px 12px; }
-    .leg-item { display:inline-flex; align-items:center; gap:6px; font-size:0.74rem; color:var(--ink); font-weight:500; }
-    .leg-dot { width:11px; height:11px; border-radius:50%; flex:none; }
+    .seg-pill { font-weight:600; }
     .owner { font-family:"DM Sans",sans-serif; font-size:0.76rem; font-weight:500; color:var(--muted);
              white-space:nowrap; text-align:right; line-height:1.4; }
 
@@ -363,12 +352,18 @@
     const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
-    // Color key per segment — used on card pills and call-point list dots.
+    // Color key per segment, aligned to the standard circle-emoji colors so the
+    // dots shown in dropdowns match the pills on cards.
     const SEGMENT_COLORS = {
-      "B&I":"#2D6CDF", "Healthcare":"#C8455F", "Vending":"#C9781E",
-      "Collegiate":"#6A48B0", "Fitness":"#2C8F5B", "Travel":"#1F9AA8",
+      "B&I":"#3B82F6", "Healthcare":"#EF4444", "Vending":"#F97316",
+      "Collegiate":"#A855F7", "Fitness":"#22C55E", "Travel":"#EAB308",
+    };
+    const SEGMENT_EMOJI = {
+      "B&I":"🔵", "Healthcare":"🔴", "Vending":"🟠",
+      "Collegiate":"🟣", "Fitness":"🟢", "Travel":"🟡",
     };
     function segColor(s) { return SEGMENT_COLORS[s] || "#6b7686"; }
+    function segEmoji(s) { return SEGMENT_EMOJI[s] || "⚪"; }
     const BI_SUBCATEGORIES = ["White Collar", "Blue Collar"];
     const FMCS = ["Aramark", "Sodexo", "Compass Group", "Other"];
     // Suggested call types for the call log (the field stays free-text via datalist).
@@ -706,8 +701,7 @@
 
       const regionOpts = '<option value="">All regions</option>' + REGIONS.map(r =>
         '<option value="'+r+'"'+(region===r?' selected':'')+'>'+r+'</option>').join("");
-      const segOpts = '<option value="">All segments</option>' + SEGMENTS.map(s =>
-        '<option value="'+s+'"'+(segment===s?' selected':'')+'>'+s+'</option>').join("");
+      const segOpts = '<option value="">All segments</option>' + segOptionTags(segment);
       const repChecks = repPool.map(p =>
         '<label class="rep-check"><input type="checkbox" class="dash-rep-cb" value="'+p.id+'"'+(selected.includes(p.id)?' checked':'')+'> '+esc(p.name)+'</label>').join("");
       const repClear = selected.length
@@ -747,8 +741,7 @@
     function repDashboard() {
       const segment = state.dashSegment || "";
       const active = getAccounts().filter(a => a.status !== "lost" && (!segment || a.segment === segment));
-      const segOpts = '<option value="">All segments</option>' + SEGMENTS.map(s =>
-        '<option value="'+s+'"'+(segment===s?' selected':'')+'>'+s+'</option>').join("");
+      const segOpts = '<option value="">All segments</option>' + segOptionTags(segment);
       return ''
         + '<div class="section-label">My pipeline by stage</div>'
         + '<div class="dash-filters"><select id="dash-segment" class="filt">'+segOpts+'</select></div>'
@@ -795,17 +788,22 @@
         + (isManager() ? managerDashboard() : repDashboard());
     }
 
+    // Readable text color for a filled pill, based on the color's luminance.
+    function textOn(hex) {
+      const c = hex.replace("#", "");
+      const r = parseInt(c.substr(0,2),16), g = parseInt(c.substr(2,2),16), b = parseInt(c.substr(4,2),16);
+      return (0.299*r + 0.587*g + 0.114*b) > 130 ? "#1a2432" : "#fff";
+    }
     // Colored segment pill (the segment color key).
     function segmentPill(s) {
-      return '<span class="chip seg-pill" style="background:'+segColor(s)+'">'+esc(s)+'</span>';
+      const col = segColor(s);
+      return '<span class="chip seg-pill" style="background:'+col+';color:'+textOn(col)+'">'+esc(s)+'</span>';
     }
-
-    // Collapsible color key shown on the Pipeline and Call Points screens.
-    function segmentLegend() {
-      const items = SEGMENTS.map(s =>
-        '<span class="leg-item"><span class="leg-dot" style="background:'+segColor(s)+'"></span>'+esc(s)+'</span>').join("");
-      return '<details class="legend"><summary>Segment colors</summary>'
-        + '<div class="legend-row">'+items+'</div></details>';
+    // Segment <option> tags with a colored dot prefixed to each name. The option
+    // VALUE stays the clean segment string; the emoji lives only in the label.
+    function segOptionTags(selected) {
+      return SEGMENTS.map(s =>
+        '<option value="'+esc(s)+'"'+(s===selected?' selected':'')+'>'+segEmoji(s)+' '+esc(s)+'</option>').join("");
     }
 
     function accountCard(a) {
@@ -873,8 +871,7 @@
       const title = isManager() ? "Pipeline — all reps" : "My accounts";
       const stageOpts = '<option value="">All stages</option>' + Object.keys(STAGES).map(n =>
         '<option value="'+n+'"'+(f.stage===n?' selected':'')+'>Stage '+n+'</option>').join("");
-      const segOpts = '<option value="">All segments</option>' + SEGMENTS.map(s =>
-        '<option value="'+s+'"'+(f.segment===s?' selected':'')+'>'+s+'</option>').join("");
+      const segOpts = '<option value="">All segments</option>' + segOptionTags(f.segment);
       const statusLabels = { active:"Active", lost:"Lost", all:"All status" };
       const statusOpts = ["active","lost","all"].map(s =>
         '<option value="'+s+'"'+(f.status===s?' selected':'')+'>'+statusLabels[s]+'</option>').join("");
@@ -896,7 +893,6 @@
         +   mgrFilters
         +   '<select id="flt-status" class="filt">'+statusOpts+'</select>'
         + '</div>'
-        + segmentLegend()
         + '<div id="results"></div>';
     }
 
@@ -1059,7 +1055,7 @@
       const curOwner = account ? account.ownerId : currentUser.id;
       const curStatus= account ? account.status : "active";
 
-      const segOpts   = '<option value="">— Select —</option>' + optList(SEGMENTS, g("segment"));
+      const segOpts   = '<option value="">— Select —</option>' + segOptionTags(g("segment"));
       const subOpts   = '<option value="">— Select —</option>' + optList(BI_SUBCATEGORIES, g("biSubCategory"));
       // FMC: a stored name that isn't one of the known companies means "Other" was
       // used — select Other and pre-fill the free-text box with the saved name.
@@ -1245,8 +1241,7 @@
 
     function callPointsView() {
       const title = isManager() ? "Call Points — all reps" : "My call points";
-      const segOpts = '<option value="">All segments</option>' + SEGMENTS.map(s =>
-        '<option value="'+s+'"'+(state.cpSegment===s?' selected':'')+'>'+s+'</option>').join("");
+      const segOpts = '<option value="">All segments</option>' + segOptionTags(state.cpSegment);
       let mgrFilters = "";
       if (isManager()) {
         const regionOpts = '<option value="">All regions</option>' + REGIONS.map(r =>
@@ -1260,7 +1255,6 @@
         +   '<button class="btn btn-primary" data-action="cp-add">+ Add call point</button></div>'
         + '<input id="cp-search" class="search" type="search" placeholder="Search call points by name…" value="'+esc(state.cpSearch)+'" />'
         + '<div class="filters"><select id="cpf-segment" class="filt">'+segOpts+'</select>'+mgrFilters+'</div>'
-        + segmentLegend()
         + '<div id="cp-results"></div>';
     }
 
@@ -1352,7 +1346,7 @@
       const isEdit = !!cp;
       const curFmc = cp ? (cp.fmcManaged ? "yes" : "no") : "";
       const curOwner = cp ? cp.ownerId : currentUser.id;
-      const segOpts = '<option value="">— Select —</option>' + optList(SEGMENTS, g("segment"));
+      const segOpts = '<option value="">— Select —</option>' + segOptionTags(g("segment"));
       const knownFmcs = FMCS.filter(f => f !== "Other");
       const storedFmc = g("fmcName") || "";
       const fmcIsOther = !!storedFmc && !knownFmcs.includes(storedFmc);
