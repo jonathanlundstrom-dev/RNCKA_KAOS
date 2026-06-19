@@ -154,6 +154,18 @@
             background:#eef1f6; color:var(--muted); }
     .chip.fmc { background:#f3eede; color:#8a6d1f; }
     .chip.lost { background:#f0d9d9; color:#9b2c2c; font-weight:700; }
+    .seg-pill { color:#fff; font-weight:600; }
+
+    /* Segment color legend */
+    .legend { margin-bottom:12px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+    .legend > summary { list-style:none; cursor:pointer; padding:9px 12px; font-size:0.74rem;
+                        font-weight:600; color:var(--navy); display:flex; align-items:center; }
+    .legend > summary::-webkit-details-marker { display:none; }
+    .legend > summary::after { content:"▾"; margin-left:auto; color:var(--muted); font-size:0.7rem; }
+    .legend[open] > summary::after { content:"▴"; }
+    .legend-row { display:flex; flex-wrap:wrap; gap:8px 14px; padding:2px 12px 12px; }
+    .leg-item { display:inline-flex; align-items:center; gap:6px; font-size:0.74rem; color:var(--ink); font-weight:500; }
+    .leg-dot { width:11px; height:11px; border-radius:50%; flex:none; }
     .owner { font-family:"DM Sans",sans-serif; font-size:0.76rem; font-weight:500; color:var(--muted);
              white-space:nowrap; text-align:right; line-height:1.4; }
 
@@ -351,6 +363,12 @@
     const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
+    // Color key per segment — used on card pills and call-point list dots.
+    const SEGMENT_COLORS = {
+      "B&I":"#2D6CDF", "Healthcare":"#C8455F", "Vending":"#C9781E",
+      "Collegiate":"#6A48B0", "Fitness":"#2C8F5B", "Travel":"#1F9AA8",
+    };
+    function segColor(s) { return SEGMENT_COLORS[s] || "#6b7686"; }
     const BI_SUBCATEGORIES = ["White Collar", "Blue Collar"];
     const FMCS = ["Aramark", "Sodexo", "Compass Group", "Other"];
     // Suggested call types for the call log (the field stays free-text via datalist).
@@ -777,6 +795,19 @@
         + (isManager() ? managerDashboard() : repDashboard());
     }
 
+    // Colored segment pill (the segment color key).
+    function segmentPill(s) {
+      return '<span class="chip seg-pill" style="background:'+segColor(s)+'">'+esc(s)+'</span>';
+    }
+
+    // Collapsible color key shown on the Pipeline and Call Points screens.
+    function segmentLegend() {
+      const items = SEGMENTS.map(s =>
+        '<span class="leg-item"><span class="leg-dot" style="background:'+segColor(s)+'"></span>'+esc(s)+'</span>').join("");
+      return '<details class="legend"><summary>Segment colors</summary>'
+        + '<div class="legend-row">'+items+'</div></details>';
+    }
+
     function accountCard(a) {
       const lost = a.status === "lost";
       const color = STAGE_COLORS[a.stage];
@@ -804,7 +835,7 @@
         + '<article class="card'+(lost?' lost':'')+'" data-action="open" data-id="'+a.id+'">'
         +   '<div class="card-top"><h2 class="card-name">'+esc(a.accountName)+'</h2>'
         +     '<span class="owner">'+repName(a.ownerId)+'<br>'+repRegion(a.ownerId)+'</span></div>'
-        +   '<div class="chips">'+staleChip+lostChip+'<span class="chip">'+a.segment+'</span>'+subCat+fmc+'</div>'
+        +   '<div class="chips">'+staleChip+lostChip+segmentPill(a.segment)+subCat+fmc+'</div>'
         +   '<div class="stage"><div class="stage-label"><span class="dot" style="background:'+color+'"></span>'
         +     'Stage '+a.stage+' · '+STAGES[a.stage]+'</div><div class="stage-bar">'+segs+'</div></div>'
         +   nextLine + photoStrip
@@ -865,6 +896,7 @@
         +   mgrFilters
         +   '<select id="flt-status" class="filt">'+statusOpts+'</select>'
         + '</div>'
+        + segmentLegend()
         + '<div id="results"></div>';
     }
 
@@ -1191,7 +1223,7 @@
         + '<article class="card" data-action="cp-open" data-id="'+c.id+'">'
         +   '<div class="card-top"><h2 class="card-name">'+esc(c.name)+'</h2>'
         +     '<span class="owner">'+repName(c.ownerId)+'</span></div>'
-        +   '<div class="chips">'+staleChip+'<span class="chip">'+c.segment+'</span>'+fmc+'</div>'
+        +   '<div class="chips">'+staleChip+segmentPill(c.segment)+fmc+'</div>'
         +   lastLine + photoStrip
         + '</article>';
     }
@@ -1204,7 +1236,7 @@
       const side = stale ? '<span class="chip stale">Needs a call</span>' : '<span class="lrow-chev">›</span>';
       return ''
         + '<div class="lrow" data-action="cp-open" data-id="'+c.id+'">'
-        +   '<span class="lrow-dot" style="background:'+(stale?'var(--gold)':'var(--line)')+'"></span>'
+        +   '<span class="lrow-dot" style="background:'+segColor(c.segment)+'"></span>'
         +   '<div class="lrow-main"><div class="lrow-name">'+esc(c.name)+'</div>'
         +     '<div class="lrow-sub">'+esc(sub)+'</div></div>'
         +   '<div class="lrow-side">'+side+'</div>'
@@ -1228,6 +1260,7 @@
         +   '<button class="btn btn-primary" data-action="cp-add">+ Add call point</button></div>'
         + '<input id="cp-search" class="search" type="search" placeholder="Search call points by name…" value="'+esc(state.cpSearch)+'" />'
         + '<div class="filters"><select id="cpf-segment" class="filt">'+segOpts+'</select>'+mgrFilters+'</div>'
+        + segmentLegend()
         + '<div id="cp-results"></div>';
     }
 
