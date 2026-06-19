@@ -139,6 +139,33 @@
     .act:last-child { border-bottom:none; }
     .act-date { font-family:"DM Mono",monospace; font-size:0.74rem; color:var(--muted); white-space:nowrap; flex:none; }
 
+    /* Call log items (richer than plain activity) */
+    .act.call-log { flex-direction:column; gap:6px; }
+    .call-log-top { display:flex; align-items:center; gap:8px; }
+    .call-type { font-size:0.66rem; font-weight:700; letter-spacing:0.02em; text-transform:uppercase;
+                 color:var(--navy); background:#eef2f8; border:1px solid #dce4ef; border-radius:999px; padding:2px 9px; }
+    .call-note { color:var(--ink); }
+    .exec-summary { display:flex; flex-direction:column; gap:3px; margin-top:2px;
+                    border-left:2px solid var(--gold); padding-left:10px; }
+    .exec-line { font-size:0.82rem; color:var(--muted); }
+    .exec-tag { font-weight:700; color:var(--navy); margin-right:4px; }
+
+    /* Call log form: execution blocks */
+    .cp-log-sub { color:var(--muted); font-size:0.9rem; margin:-4px 0 14px; }
+    .exec-block { margin-bottom:14px; }
+    .exec-label { display:block; font-size:0.8rem; font-weight:600; color:var(--ink); margin-bottom:6px; }
+    .exec-rows { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+    .exec-row { display:flex; align-items:center; justify-content:space-between; gap:8px;
+                background:#f7f8fa; border:1px solid var(--line); border-radius:9px; padding:8px 12px; font-size:0.86rem; }
+    .exec-row-del { background:none; border:none; color:var(--muted); font-size:1.2rem; line-height:1; cursor:pointer; padding:0 2px; }
+    .exec-add { display:flex; gap:8px; }
+    .exec-add input { font-family:inherit; font-size:0.9rem; padding:10px 12px; border:1px solid var(--line); border-radius:10px; }
+    .exec-add input:not(.exec-qty) { flex:1; min-width:0; }
+    .exec-qty { width:62px; flex:none; text-align:center; }
+    .exec-addbtn { flex:none; white-space:nowrap; }
+    .exec-check { display:flex; align-items:center; gap:9px; font-size:0.9rem; font-weight:600; color:var(--ink); cursor:pointer; }
+    .exec-check input { width:17px; height:17px; }
+
     .team-region { background:#fff; border:1px solid var(--line); border-radius:var(--radius);
                    margin-bottom:12px; overflow:hidden; }
     .region-head { background:var(--navy); color:#fff; font-size:0.72rem; text-transform:uppercase;
@@ -151,9 +178,10 @@
 
     .field { margin-bottom:14px; }
     .field label { display:block; font-size:0.78rem; font-weight:600; color:var(--ink); margin-bottom:5px; }
-    .field input, .field select {
+    .field input, .field select, .field textarea {
       width:100%; font-family:inherit; font-size:0.95rem; padding:11px 12px;
       border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); }
+    .field textarea { resize:vertical; line-height:1.45; }
     .form-section { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.07em;
                     color:var(--muted); font-weight:700; margin:22px 0 10px;
                     padding-bottom:6px; border-bottom:1px solid var(--line); }
@@ -273,6 +301,10 @@
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     const BI_SUBCATEGORIES = ["White Collar", "Blue Collar"];
     const FMCS = ["Aramark", "Sodexo", "Compass Group", "Other"];
+    // Suggested call types for the call log (the field stays free-text via datalist).
+    const CALL_TYPES = ["Phone", "Email", "In-person meeting", "Video call", "Text / SMS", "Drop-in"];
+    // Activation kinds for the execution section.
+    const ACTIVATION_TYPES = ["Sampling", "Activation", "Both"];
     const REGIONS = ["West", "Central", "Midwest", "Northeast", "Southeast"];
     const STAGES = {
       1:"Customer Knowledge", 2:"Customer Engagement", 3:"Customer Pitch",
@@ -467,7 +499,7 @@
     let callPoints = [];
 
     const CALLPOINT_FIELDS = {
-      name:"name", segment:"segment", fmcManaged:"fmc_managed", fmcName:"fmc_name",
+      name:"name", segment:"segment", fmcManaged:"fmc_managed", fmcName:"fmc_name", sectorLob:"sector_lob",
       address:"address", city:"city", state:"state", zip:"zip",
       primaryContact:"primary_contact", phone:"phone", email:"email",
       lastCall:"last_call", ownerId:"owner_id",
@@ -488,12 +520,13 @@
       return (rows || [])
         .slice()
         .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
-        .map(r => ({ id:r.id, date:r.logged_at, note:r.note }));
+        .map(r => ({ id:r.id, date:r.logged_at, note:r.note,
+                     callType:r.call_type || "", execution:r.execution || {} }));
     }
     function rowToCallPoint(r) {
       return {
         id:r.id, name:r.name, segment:r.segment,
-        fmcManaged:!!r.fmc_managed, fmcName:r.fmc_name,
+        fmcManaged:!!r.fmc_managed, fmcName:r.fmc_name, sectorLob:r.sector_lob||"",
         address:r.address||"", city:r.city||"", state:r.state||"", zip:r.zip||"",
         primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"",
         lastCall:r.last_call||"", ownerId:r.owner_id,
@@ -540,7 +573,14 @@
     const DEFAULT_FILTERS = { search:"", stage:"", segment:"", region:"", owner:"", status:"active", stale:false };
     const state = { view:"home", selectedId:null, editingId:null, filters:{ ...DEFAULT_FILTERS },
                     cpId:null, cpEditId:null, cpSearch:"", cpStale:false,
-                    cpSegment:"", cpRegion:"", cpOwner:"", dashRegion:"", dashReps:[], dashSegment:"" };
+                    cpSegment:"", cpRegion:"", cpOwner:"", dashRegion:"", dashReps:[], dashSegment:"",
+                    callLogCpId:null,
+                    callLog:{ type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" } };
+
+    // A fresh, empty call-log draft.
+    function emptyCallLog() {
+      return { type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" };
+    }
 
     /* =========================================================== VIEWS */
     function ring(pct, label, color) {
@@ -1103,12 +1143,10 @@
         : "";
 
       const callList = c.calls.length
-        ? '<div class="activity">' + c.calls.slice().reverse().map(n =>
-            '<div class="act"><span class="act-date">'+fmtDate(n.date)+'</span><span>'+esc(n.note)+'</span></div>').join("") + '</div>'
+        ? '<div class="activity">' + c.calls.slice().reverse().map(callLogItem).join("") + '</div>'
         : '<p style="color:var(--muted);font-size:0.85rem;margin-top:8px">No calls logged yet.</p>';
       const logAdd = editable
-        ? '<div class="note-add"><input id="cp-note-input" type="text" placeholder="What happened on the call?" />'
-          + '<button class="btn btn-ghost" data-action="log-call" data-id="'+c.id+'">Log call</button></div>'
+        ? '<div class="form-actions"><button class="btn btn-primary" data-action="log-call" data-id="'+c.id+'">+ Log a call</button></div>'
         : "";
 
       const thumbs = c.photos.length
@@ -1135,6 +1173,7 @@
         + '<div class="detail-rows">'
         +   row("Segment", c.segment)
         +   row("FMC managed", c.fmcManaged ? "Yes" : "No") + row("FMC", esc(c.fmcName))
+        +   (c.fmcManaged ? row("Sector/LOB", esc(c.sectorLob)) : "")
         +   row("Owner", repName(c.ownerId)) + row("Region", repRegion(c.ownerId))
         +   row("Address", addressLine) + row("Primary contact", esc(c.primaryContact))
         +   row("Phone", esc(c.phone)) + row("Email", esc(c.email))
@@ -1153,9 +1192,13 @@
       const curFmc = cp ? (cp.fmcManaged ? "yes" : "no") : "";
       const curOwner = cp ? cp.ownerId : currentUser.id;
       const segOpts = '<option value="">— Select —</option>' + optList(SEGMENTS, g("segment"));
-      const fmcOpts = '<option value="">— Select —</option>' + optList(FMCS, g("fmcName"));
+      const knownFmcs = FMCS.filter(f => f !== "Other");
+      const storedFmc = g("fmcName") || "";
+      const fmcIsOther = !!storedFmc && !knownFmcs.includes(storedFmc);
+      const fmcOpts = '<option value="">— Select —</option>' + optList(FMCS, fmcIsOther ? "Other" : storedFmc);
       const ownerOpts = repOptionsGrouped(curOwner);
       const fmcHidden = (cp && cp.fmcManaged) ? "" : " hidden";
+      const fmcOtherHidden = (cp && cp.fmcManaged && fmcIsOther) ? "" : " hidden";
       const ownerField = isManager()
         ? '<div class="field"><label>Owner (assign)</label><select id="cp-owner">'+ownerOpts+'</select></div>' : "";
       const deleteRow = isEdit
@@ -1174,6 +1217,10 @@
         +   '<option value="yes"'+(curFmc==="yes"?" selected":"")+'>Yes</option>'
         +   '<option value="no"'+(curFmc==="no"?" selected":"")+'>No</option></select></div>'
         + '<div class="field'+fmcHidden+'" id="cp-field-fmcname"><label>FMC</label><select id="cp-fmcname">'+fmcOpts+'</select></div>'
+        + '<div class="field'+fmcOtherHidden+'" id="cp-field-fmcother"><label>FMC name (Other)</label>'
+        +   '<input id="cp-fmcother" type="text" value="'+esc(fmcIsOther ? storedFmc : "")+'" placeholder="Type the FMC name" /></div>'
+        + '<div class="field'+fmcHidden+'" id="cp-field-sectorlob"><label>Sector/LOB</label>'
+        +   '<input id="cp-sectorlob" type="text" value="'+esc(g("sectorLob"))+'" placeholder="Sector/Line of Business" /></div>'
         + '<div class="form-section">Location</div>'
         + '<div class="field"><label>Address</label><input id="cp-address" type="text" value="'+esc(g("address"))+'" /></div>'
         + '<div class="field"><label>City</label><input id="cp-city" type="text" value="'+esc(g("city"))+'" /></div>'
@@ -1201,9 +1248,14 @@
         return;
       }
       const fmcManaged = v("cp-fmc") === "yes";
+      const fmcPicked  = v("cp-fmcname");
+      const fmcName = fmcManaged
+        ? (fmcPicked === "Other" ? (v("cp-fmcother").trim() || null) : (fmcPicked || null))
+        : null;
       const data = {
         name, segment,
-        fmcManaged, fmcName: fmcManaged ? (v("cp-fmcname") || null) : null,
+        fmcManaged, fmcName,
+        sectorLob: fmcManaged ? (v("cp-sectorlob").trim() || null) : null,
         address:v("cp-address").trim(), city:v("cp-city").trim(),
         state:v("cp-state").trim(), zip:v("cp-zip").trim(),
         primaryContact:v("cp-contact").trim(), phone:v("cp-phone").trim(), email:v("cp-email").trim(),
@@ -1224,19 +1276,146 @@
       render();
     }
 
-    async function logCall(id) {
-      const input = document.getElementById("cp-note-input");
-      const note = input ? input.value.trim() : "";
-      if (!note) return;
+    // ---- Call log display helpers -------------------------------------------
+    // Compact one-line summaries of what was executed on a call.
+    function callExecSummary(ex) {
+      if (!ex) return "";
+      const parts = [];
+      const cold = (ex.coldEquipment || []).filter(x => x && x.item);
+      if (cold.length) parts.push('<div class="exec-line"><span class="exec-tag">Cold equip</span> '
+        + cold.map(x => esc(x.item) + (x.qty ? ' ×'+x.qty : '')).join(' · ') + '</div>');
+      const skus = (ex.newSkus || []).filter(x => x && x.sku);
+      if (skus.length) parts.push('<div class="exec-line"><span class="exec-tag">New SKUs</span> '
+        + skus.map(x => esc(x.sku) + (x.qty ? ' ×'+x.qty : '')).join(' · ') + '</div>');
+      const act = ex.activation;
+      if (act && (act.type || act.notes)) parts.push('<div class="exec-line"><span class="exec-tag">'
+        + esc(act.type || 'Activation') + '</span> ' + esc(act.notes || '') + '</div>');
+      return parts.join("");
+    }
+    function callLogItem(n) {
+      const typeChip = n.callType ? '<span class="call-type">'+esc(n.callType)+'</span>' : "";
+      const exec = callExecSummary(n.execution);
+      return '<div class="act call-log">'
+        + '<div class="call-log-top"><span class="act-date">'+fmtDate(n.date)+'</span>'+typeChip+'</div>'
+        + (n.note ? '<div class="call-note">'+esc(n.note)+'</div>' : "")
+        + (exec ? '<div class="exec-summary">'+exec+'</div>' : "")
+        + '</div>';
+    }
+
+    // ---- Call log form ------------------------------------------------------
+    function cpLogView() {
+      const c = getCallPoint(state.callLogCpId);
+      if (!c) return '<p>Call point not found.</p>';
+      const d = state.callLog;
+      const typeSugg = CALL_TYPES.map(t => '<option value="'+t+'"></option>').join("");
+      const actTypeOpts = ACTIVATION_TYPES.map(t =>
+        '<option value="'+t+'"'+(t===d.actType?' selected':'')+'>'+t+'</option>').join("");
+
+      const coldRows = d.cold.map((x, i) =>
+        '<div class="exec-row"><span class="exec-row-text">'+esc(x.item)+(x.qty?' ×'+x.qty:'')+'</span>'
+        + '<button class="exec-row-del" data-action="clog-del-cold" data-i="'+i+'">×</button></div>').join("");
+      const skuRows = d.skus.map((x, i) =>
+        '<div class="exec-row"><span class="exec-row-text">'+esc(x.sku)+(x.qty?' ×'+x.qty:'')+'</span>'
+        + '<button class="exec-row-del" data-action="clog-del-sku" data-i="'+i+'">×</button></div>').join("");
+
+      const actFields = d.actDone
+        ? '<div style="margin-top:8px">'
+          + '<div class="field"><label>Type</label><select id="cl-act-type">'+actTypeOpts+'</select></div>'
+          + '<div class="field"><label>Notes</label><input id="cl-act-note" type="text" value="'+esc(d.actNote)+'" placeholder="What we ran" /></div>'
+          + '</div>'
+        : "";
+
+      return ''
+        + '<button class="back" data-action="clog-cancel">‹ Cancel</button>'
+        + '<h2 class="detail-name">Log a call</h2>'
+        + '<p class="cp-log-sub">'+esc(c.name)+'</p>'
+        + '<div class="form-msg" id="cl-msg"></div>'
+
+        + '<div class="field"><label>Call type</label>'
+        +   '<input id="cl-type" list="cl-type-list" value="'+esc(d.type)+'" placeholder="Phone, email, in-person…" />'
+        +   '<datalist id="cl-type-list">'+typeSugg+'</datalist></div>'
+        + '<div class="field"><label>What happened on the call?</label>'
+        +   '<textarea id="cl-note" rows="3" placeholder="Notes from the call">'+esc(d.note)+'</textarea></div>'
+
+        + '<div class="form-section">Account Execution</div>'
+
+        + '<div class="exec-block"><label class="exec-label">Cold equipment placed</label>'
+        +   (coldRows ? '<div class="exec-rows">'+coldRows+'</div>' : '')
+        +   '<div class="exec-add"><input id="cl-cold-item" type="text" placeholder="Equipment (e.g. Cooler)" />'
+        +     '<input id="cl-cold-qty" type="number" min="1" placeholder="#" class="exec-qty" />'
+        +     '<button class="btn btn-ghost exec-addbtn" data-action="clog-add-cold">Add</button></div></div>'
+
+        + '<div class="exec-block"><label class="exec-label">New SKUs placed</label>'
+        +   (skuRows ? '<div class="exec-rows">'+skuRows+'</div>' : '')
+        +   '<div class="exec-add"><input id="cl-sku-name" type="text" placeholder="SKU (e.g. RB SF 12oz)" />'
+        +     '<input id="cl-sku-qty" type="number" min="1" placeholder="#" class="exec-qty" />'
+        +     '<button class="btn btn-ghost exec-addbtn" data-action="clog-add-sku">Add</button></div></div>'
+
+        + '<div class="exec-block"><label class="exec-check"><input type="checkbox" id="cl-act-done"'+(d.actDone?' checked':'')+'> Ran an activation or sampling</label>'
+        +   actFields + '</div>'
+
+        + '<div class="form-actions">'
+        +   '<button class="btn btn-primary" data-action="clog-save">Save call</button>'
+        +   '<button class="btn btn-ghost" data-action="clog-cancel">Cancel</button>'
+        + '</div>';
+    }
+
+    // Pull the free-text fields out of the open form into the draft, so adding or
+    // removing an execution row (which re-renders) doesn't wipe what's typed.
+    function syncCallLogDraft() {
+      const d = state.callLog;
+      const get = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+      const t  = get("cl-type");     if (t  !== undefined) d.type = t;
+      const n  = get("cl-note");     if (n  !== undefined) d.note = n;
+      const at = get("cl-act-type"); if (at !== undefined) d.actType = at;
+      const an = get("cl-act-note"); if (an !== undefined) d.actNote = an;
+      const cb = document.getElementById("cl-act-done"); if (cb) d.actDone = cb.checked;
+    }
+    // Read the "add row" inputs, commit a row to the draft, then re-render.
+    function addExecRow(kind) {
+      syncCallLogDraft();
+      if (kind === "cold") {
+        const item = (document.getElementById("cl-cold-item").value || "").trim();
+        const qty  = Number(document.getElementById("cl-cold-qty").value) || 0;
+        if (item) state.callLog.cold.push({ item, qty });
+      } else {
+        const sku = (document.getElementById("cl-sku-name").value || "").trim();
+        const qty = Number(document.getElementById("cl-sku-qty").value) || 0;
+        if (sku) state.callLog.skus.push({ sku, qty });
+      }
+      render();
+    }
+
+    async function saveCallLog() {
+      syncCallLogDraft();
+      const d = state.callLog;
+      const note = (d.note || "").trim();
+      // Require at least something meaningful.
+      if (!note && !d.type && !d.cold.length && !d.skus.length && !d.actDone) {
+        document.getElementById("cl-msg").textContent = "Add a note or some execution detail before saving.";
+        return;
+      }
+      const execution = {
+        coldEquipment: d.cold,
+        newSkus: d.skus,
+        activation: d.actDone ? { type:d.actType, notes:(d.actNote || "").trim() } : null,
+      };
       const today = todayStr();
+      const id = state.callLogCpId;
       const { data, error } = await sb.from("call_logs")
-        .insert({ call_point_id:id, note, logged_at:today, author_id:currentUser.id })
+        .insert({ call_point_id:id, note, call_type:d.type || null, execution, logged_at:today, author_id:currentUser.id })
         .select().single();
-      if (error) { alert("Couldn't log call: " + error.message); return; }
+      if (error) { document.getElementById("cl-msg").textContent = "Couldn't save: " + error.message; return; }
       // Logging a call resets the call point's 4-week "needs a call" clock.
       await sb.from("call_points").update({ last_call:today }).eq("id", id);
       const c = getCallPoint(id);
-      if (c) { c.calls.push({ id:data.id, date:data.logged_at, note:data.note }); c.lastCall = today; }
+      if (c) {
+        c.calls.push({ id:data.id, date:data.logged_at, note:data.note,
+                       callType:data.call_type||"", execution:data.execution||{} });
+        c.lastCall = today;
+      }
+      state.callLog = emptyCallLog();
+      state.view = "cp-detail";
       render();
     }
 
@@ -1250,7 +1429,7 @@
     function currentSection() {
       const v = state.view;
       if (v === "list" || v === "detail" || v === "form") return "pipeline";
-      if (v === "callpoints" || v === "cp-detail" || v === "cp-form") return "callpoints";
+      if (v === "callpoints" || v === "cp-detail" || v === "cp-form" || v === "cp-log") return "callpoints";
       if (v === "wins") return "wins";
       if (v === "team") return "team";
       return "home";
@@ -1290,6 +1469,7 @@
       else if (state.view === "callpoints") { app.innerHTML = callPointsView(); renderCpResults(); }
       else if (state.view === "cp-detail")  app.innerHTML = cpDetailView();
       else if (state.view === "cp-form")    app.innerHTML = cpFormView(state.cpEditId ? getCallPoint(state.cpEditId) : null);
+      else if (state.view === "cp-log")     app.innerHTML = cpLogView();
     }
 
     /* ============================================================ AUTH */
@@ -1435,7 +1615,13 @@
           });
         }
       }
-      else if (action === "log-call")        { logCall(el.dataset.id); }
+      else if (action === "log-call")        { state.callLogCpId = el.dataset.id; state.callLog = emptyCallLog(); state.view = "cp-log"; render(); }
+      else if (action === "clog-add-cold")   { addExecRow("cold"); }
+      else if (action === "clog-add-sku")    { addExecRow("sku"); }
+      else if (action === "clog-del-cold")   { syncCallLogDraft(); state.callLog.cold.splice(Number(el.dataset.i), 1); render(); }
+      else if (action === "clog-del-sku")    { syncCallLogDraft(); state.callLog.skus.splice(Number(el.dataset.i), 1); render(); }
+      else if (action === "clog-save")       { saveCallLog(); }
+      else if (action === "clog-cancel")     { state.callLog = emptyCallLog(); state.view = "cp-detail"; render(); }
       else if (action === "cp-toggle-stale") { state.cpStale = !state.cpStale; renderCpResults(); }
       else if (action === "cp-add-photo")    { document.getElementById("cp-photo-input").click(); }
       else if (action === "cp-del-photo")    {
@@ -1569,7 +1755,13 @@
         const files = Array.from(e.target.files || []);
         if (files.length) attachPhotos(files, acct.photos, "accounts", acct.id, arr => updateAccount(acct.id, { photos:arr }));
       }
-      if (id === "cp-fmc") document.getElementById("cp-field-fmcname").classList.toggle("hidden", e.target.value !== "yes");
+      if (id === "cp-fmc")    { const hide = e.target.value !== "yes";
+                                document.getElementById("cp-field-fmcname").classList.toggle("hidden", hide);
+                                document.getElementById("cp-field-sectorlob").classList.toggle("hidden", hide);
+                                const isOther = document.getElementById("cp-fmcname").value === "Other";
+                                document.getElementById("cp-field-fmcother").classList.toggle("hidden", hide || !isOther); }
+      if (id === "cl-act-done") { syncCallLogDraft(); state.callLog.actDone = e.target.checked; render(); }
+      if (id === "cp-fmcname") document.getElementById("cp-field-fmcother").classList.toggle("hidden", e.target.value !== "Other");
       if (id === "cp-photo-input") {
         const cp = getCallPoint(state.cpId);
         if (!cp) return;
