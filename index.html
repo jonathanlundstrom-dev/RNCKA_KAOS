@@ -159,8 +159,9 @@
                 background:#f7f8fa; border:1px solid var(--line); border-radius:9px; padding:8px 12px; font-size:0.86rem; }
     .exec-row-del { background:none; border:none; color:var(--muted); font-size:1.2rem; line-height:1; cursor:pointer; padding:0 2px; }
     .exec-add { display:flex; gap:8px; }
-    .exec-add input { font-family:inherit; font-size:0.9rem; padding:10px 12px; border:1px solid var(--line); border-radius:10px; }
-    .exec-add input:not(.exec-qty) { flex:1; min-width:0; }
+    .exec-add input, .exec-add select { font-family:inherit; font-size:0.9rem; padding:10px 12px;
+                      border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); }
+    .exec-pick { flex:1; min-width:0; }
     .exec-qty { width:62px; flex:none; text-align:center; }
     .exec-addbtn { flex:none; white-space:nowrap; }
     .exec-check { display:flex; align-items:center; gap:9px; font-size:0.9rem; font-weight:600; color:var(--ink); cursor:pointer; }
@@ -305,6 +306,21 @@
     const CALL_TYPES = ["Phone", "Email", "In-person meeting", "Video call", "Text / SMS", "Drop-in"];
     // Activation kinds for the execution section.
     const ACTIVATION_TYPES = ["Sampling", "Activation", "Both"];
+    // Cold-equipment (cooler) types — rendered alphabetically in the call log.
+    const COOLER_TYPES = [
+      "Baby Cooler", "Large GDC", "Medium GDC", "Medium Slim",
+      "Mega GDC", "Mega Slim", "Pick & Mix", "Small GDC",
+    ];
+    // Red Bull SKUs — rendered alphabetically. Size is the differentiator (all 24-pack).
+    const SKU_TYPES = [
+      "Red Bull Energy Drink 8.4oz", "Red Bull Sugarfree 8.4oz",
+      "Red Bull Peach Edition (White Peach) 8.4oz", "Red Bull Sea Blue Edition (Juneberry) 8.4oz",
+      "Red Bull Red Edition (Watermelon) 8.4oz", "Red Bull Zero 8.4oz",
+      "Red Bull Energy Drink 12oz", "Red Bull Sugarfree 12oz",
+      "Red Bull Peach Edition (White Peach) 12oz", "Red Bull Sea Blue Edition (Juneberry) 12oz",
+      "Red Bull Red Edition (Watermelon) 12oz", "Red Bull Amber Edition (Strawberry Apricot) 12oz",
+      "Red Bull Yellow Edition (Tropical) 12oz", "Red Bull Zero 12oz",
+    ];
     const REGIONS = ["West", "Central", "Midwest", "Northeast", "Southeast"];
     const STAGES = {
       1:"Customer Knowledge", 2:"Customer Engagement", 3:"Customer Pitch",
@@ -1310,6 +1326,11 @@
       const typeSugg = CALL_TYPES.map(t => '<option value="'+t+'"></option>').join("");
       const actTypeOpts = ACTIVATION_TYPES.map(t =>
         '<option value="'+t+'"'+(t===d.actType?' selected':'')+'>'+t+'</option>').join("");
+      const sortedOpts = (list, placeholder) => '<option value="">'+placeholder+'</option>'
+        + list.slice().sort((a, b) => a.localeCompare(b))
+            .map(x => '<option value="'+esc(x)+'">'+esc(x)+'</option>').join("");
+      const coolerOpts = sortedOpts(COOLER_TYPES, "Cooler type…");
+      const skuOpts    = sortedOpts(SKU_TYPES, "SKU…");
 
       const coldRows = d.cold.map((x, i) =>
         '<div class="exec-row"><span class="exec-row-text">'+esc(x.item)+(x.qty?' ×'+x.qty:'')+'</span>'
@@ -1341,13 +1362,13 @@
 
         + '<div class="exec-block"><label class="exec-label">Cold equipment placed</label>'
         +   (coldRows ? '<div class="exec-rows">'+coldRows+'</div>' : '')
-        +   '<div class="exec-add"><input id="cl-cold-item" type="text" placeholder="Equipment (e.g. Cooler)" />'
+        +   '<div class="exec-add"><select id="cl-cold-item" class="exec-pick">'+coolerOpts+'</select>'
         +     '<input id="cl-cold-qty" type="number" min="1" placeholder="#" class="exec-qty" />'
         +     '<button class="btn btn-ghost exec-addbtn" data-action="clog-add-cold">Add</button></div></div>'
 
         + '<div class="exec-block"><label class="exec-label">New SKUs placed</label>'
         +   (skuRows ? '<div class="exec-rows">'+skuRows+'</div>' : '')
-        +   '<div class="exec-add"><input id="cl-sku-name" type="text" placeholder="SKU (e.g. RB SF 12oz)" />'
+        +   '<div class="exec-add"><select id="cl-sku-name" class="exec-pick">'+skuOpts+'</select>'
         +     '<input id="cl-sku-qty" type="number" min="1" placeholder="#" class="exec-qty" />'
         +     '<button class="btn btn-ghost exec-addbtn" data-action="clog-add-sku">Add</button></div></div>'
 
