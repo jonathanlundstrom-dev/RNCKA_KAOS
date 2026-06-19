@@ -655,9 +655,9 @@
     function needsCall(c) { return daysSince(c.lastCall) >= CALL_STALE_DAYS; }
 
     /* =========================================================== STATE */
-    const DEFAULT_FILTERS = { search:"", stage:"", segment:"", region:"", owner:"", status:"active", stale:false };
+    const DEFAULT_FILTERS = { search:"", stage:"", segment:"", region:"", owner:"", status:"active", stale:false, sort:"name" };
     const state = { view:"home", selectedId:null, editingId:null, filters:{ ...DEFAULT_FILTERS },
-                    cpId:null, cpEditId:null, cpSearch:"", cpStale:false,
+                    cpId:null, cpEditId:null, cpSearch:"", cpStale:false, cpSort:"name",
                     cpSegment:"", cpRegion:"", cpOwner:"", dashRegion:"", dashReps:[], dashSegment:"",
                     callLogCpId:null,
                     acctView: loadViewPref("ram_acctView"), cpView: loadViewPref("ram_cpView"),
@@ -888,6 +888,9 @@
         mgrFilters = '<select id="flt-region" class="filt">'+regionOpts+'</select>'
                    + '<select id="flt-owner" class="filt">'+ownerOpts+'</select>';
       }
+      const sortOpts = '<option value="name"'+(f.sort==="name"?' selected':'')+'>Sort: Name (A–Z)</option>'
+        + '<option value="recent"'+(f.sort==="recent"?' selected':'')+'>Sort: Last updated (newest)</option>'
+        + '<option value="oldest"'+(f.sort==="oldest"?' selected':'')+'>Sort: Last updated (oldest)</option>';
       return ''
         + '<div class="toolbar"><h2 class="toolbar-title">'+title+'</h2>'
         +   '<button class="btn btn-primary" data-action="add">+ Add account</button></div>'
@@ -897,15 +900,26 @@
         +   '<select id="flt-segment" class="filt">'+segOpts+'</select>'
         +   mgrFilters
         +   '<select id="flt-status" class="filt">'+statusOpts+'</select>'
+        +   '<select id="flt-sort" class="filt">'+sortOpts+'</select>'
         + '</div>'
         + '<div id="results"></div>';
+    }
+
+    // Sort accounts by name or by last-updated (last note / stage change) date.
+    function sortAccounts(arr, mode) {
+      const byName = (a, b) => a.accountName.localeCompare(b.accountName);
+      if (mode === "recent")
+        return arr.sort((a, b) => (b.lastTouch || "").localeCompare(a.lastTouch || "") || byName(a, b));
+      if (mode === "oldest")
+        return arr.sort((a, b) => (a.lastTouch || "0000-00-00").localeCompare(b.lastTouch || "0000-00-00") || byName(a, b));
+      return arr.sort(byName);
     }
 
     // Only the results list re-renders on search/filter, so the search box keeps focus.
     function renderResults() {
       const el = document.getElementById("results");
       if (!el) return;
-      const data = filteredAccounts();
+      const data = sortAccounts(filteredAccounts().slice(), state.filters.sort);
       const total = visibleAccounts().length;
       const staleCount = visibleAccounts().filter(needsUpdate).length;
       let banner = "";
@@ -1255,12 +1269,28 @@
         mgrFilters = '<select id="cpf-region" class="filt">'+regionOpts+'</select>'
                    + '<select id="cpf-owner" class="filt">'+ownerOpts+'</select>';
       }
+      const sortOpts = '<option value="name"'+(state.cpSort==="name"?' selected':'')+'>Sort: Name (A–Z)</option>'
+        + '<option value="recent"'+(state.cpSort==="recent"?' selected':'')+'>Sort: Last call (newest)</option>'
+        + '<option value="oldest"'+(state.cpSort==="oldest"?' selected':'')+'>Sort: Last call (oldest)</option>';
       return ''
         + '<div class="toolbar"><h2 class="toolbar-title">'+title+'</h2>'
         +   '<button class="btn btn-primary" data-action="cp-add">+ Add call point</button></div>'
         + '<input id="cp-search" class="search" type="search" placeholder="Search call points by name…" value="'+esc(state.cpSearch)+'" />'
-        + '<div class="filters"><select id="cpf-segment" class="filt">'+segOpts+'</select>'+mgrFilters+'</div>'
+        + '<div class="filters"><select id="cpf-segment" class="filt">'+segOpts+'</select>'+mgrFilters
+        +   '<select id="cpf-sort" class="filt">'+sortOpts+'</select></div>'
         + '<div id="cp-results"></div>';
+    }
+
+    // Sort call points by name, or by last-call date. Never-called points (no
+    // date) float to the top of "oldest" (they're the most overdue) and the
+    // bottom of "newest".
+    function sortCallPoints(arr, mode) {
+      const byName = (a, b) => a.name.localeCompare(b.name);
+      if (mode === "recent")
+        return arr.sort((a, b) => (b.lastCall || "").localeCompare(a.lastCall || "") || byName(a, b));
+      if (mode === "oldest")
+        return arr.sort((a, b) => (a.lastCall || "0000-00-00").localeCompare(b.lastCall || "0000-00-00") || byName(a, b));
+      return arr.sort(byName);
     }
 
     function renderCpResults() {
@@ -1274,6 +1304,7 @@
       if (state.cpSegment) data = data.filter(c => c.segment === state.cpSegment);
       if (state.cpRegion)  data = data.filter(c => repRegion(c.ownerId) === state.cpRegion);
       if (state.cpOwner)   data = data.filter(c => c.ownerId === state.cpOwner);
+      data = sortCallPoints(data.slice(), state.cpSort);
       let banner = "";
       if (state.cpStale)
         banner = '<div class="alert-banner active" data-action="cp-toggle-stale">Showing call points needing a call — tap to clear</div>';
@@ -1907,8 +1938,10 @@
       if (id === "flt-segment") { state.filters.segment = e.target.value; renderResults(); }
       if (id === "flt-region")  { state.filters.region = e.target.value;  renderResults(); }
       if (id === "flt-owner")   { state.filters.owner = e.target.value;   renderResults(); }
+      if (id === "flt-sort")    { state.filters.sort = e.target.value;    renderResults(); }
       if (id === "flt-status")  { state.filters.status = e.target.value;  renderResults(); }
       if (id === "cpf-segment") { state.cpSegment = e.target.value; renderCpResults(); }
+      if (id === "cpf-sort")    { state.cpSort = e.target.value; renderCpResults(); }
       if (id === "cpf-region")  { state.cpRegion  = e.target.value; renderCpResults(); }
       if (id === "cpf-owner")   { state.cpOwner   = e.target.value; renderCpResults(); }
       if (id === "f-segment")   document.getElementById("field-subcat").classList.toggle("hidden", e.target.value !== "B&I");
