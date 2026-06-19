@@ -130,8 +130,9 @@
     .lrow-main { flex:1; min-width:0; }
     .lrow-name { font-size:0.92rem; font-weight:600; color:var(--ink); display:flex; align-items:center; gap:7px;
                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .lrow-sub { font-size:0.76rem; color:var(--muted); margin-top:2px;
-                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .lrow-sub { display:flex; align-items:center; gap:7px; margin-top:3px; min-width:0; }
+    .lrow-meta { font-size:0.76rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .lrow-sub .seg-pill { flex:none; font-size:0.66rem; padding:2px 8px; }
     .lrow.lost .lrow-name { text-decoration:line-through; color:var(--muted); }
     .lrow-side { flex:none; display:flex; align-items:center; }
     .lrow-chev { color:var(--muted); font-size:1.25rem; line-height:1; }
@@ -391,6 +392,10 @@
       4:"Field Test & Approval", 5:"Implementation / Account Won",
     };
     const STAGE_COLORS = { 1:"#D64545", 2:"#E1833C", 3:"#F0C419", 4:"#7FB85C", 5:"#2E8B57" };
+    // Circle-emoji dots for stages (shown in dropdowns). 4 and 5 both read green —
+    // the only green circle emoji — while their actual dots/bars stay light vs dark.
+    const STAGE_EMOJI = { 1:"🔴", 2:"🟠", 3:"🟡", 4:"🟢", 5:"🟢" };
+    function stageEmoji(n) { return STAGE_EMOJI[n] || "⚪"; }
     // The team is loaded from the profiles table after login (see loadPeople).
     // Each entry: { id, name, role, region, title }. This replaces the old
     // hardcoded lists so the app always reflects who's really in the system.
@@ -854,14 +859,14 @@
       const lost = a.status === "lost";
       const color = STAGE_COLORS[a.stage];
       const staleDot = needsUpdate(a) ? '<span class="lrow-flag" title="Needs updating"></span>' : "";
-      const sub = a.segment + ' · Stage ' + a.stage + ' · ' + repName(a.ownerId)
-                + (isManager() ? ' · ' + repRegion(a.ownerId) : '');
+      const meta = 'Stage ' + a.stage + ' · ' + repName(a.ownerId)
+                 + (isManager() ? ' · ' + repRegion(a.ownerId) : '');
       const side = lost ? '<span class="chip lost">Lost</span>' : '<span class="lrow-chev">›</span>';
       return ''
         + '<div class="lrow'+(lost?' lost':'')+'" data-action="open" data-id="'+a.id+'">'
         +   '<span class="lrow-dot" style="background:'+color+'"></span>'
         +   '<div class="lrow-main"><div class="lrow-name">'+esc(a.accountName)+staleDot+'</div>'
-        +     '<div class="lrow-sub">'+esc(sub)+'</div></div>'
+        +     '<div class="lrow-sub">'+segmentPill(a.segment)+'<span class="lrow-meta">'+esc(meta)+'</span></div></div>'
         +   '<div class="lrow-side">'+side+'</div>'
         + '</div>';
     }
@@ -870,7 +875,7 @@
       const f = state.filters;
       const title = isManager() ? "Pipeline — all reps" : "My accounts";
       const stageOpts = '<option value="">All stages</option>' + Object.keys(STAGES).map(n =>
-        '<option value="'+n+'"'+(f.stage===n?' selected':'')+'>Stage '+n+'</option>').join("");
+        '<option value="'+n+'"'+(f.stage===n?' selected':'')+'>'+stageEmoji(n)+' Stage '+n+'</option>').join("");
       const segOpts = '<option value="">All segments</option>' + segOptionTags(f.segment);
       const statusLabels = { active:"Active", lost:"Lost", all:"All status" };
       const statusOpts = ["active","lost","all"].map(s =>
@@ -1064,7 +1069,7 @@
       const fmcIsOther  = !!storedFmc && !knownFmcs.includes(storedFmc);
       const fmcOpts   = '<option value="">— Select —</option>' + optList(FMCS, fmcIsOther ? "Other" : storedFmc);
       const stageOpts = Object.keys(STAGES).map(n =>
-        '<option value="'+n+'"'+(n===curStage?' selected':'')+'>Stage '+n+' · '+STAGES[n]+'</option>').join("");
+        '<option value="'+n+'"'+(n===curStage?' selected':'')+'>'+stageEmoji(n)+' Stage '+n+' · '+STAGES[n]+'</option>').join("");
       const ownerOpts = repOptionsGrouped(curOwner);
 
       const subHidden  = (account && account.segment === "B&I") ? "" : " hidden";
