@@ -2,8 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>NCRAM Pipeline</title>
+
+  <!-- Add-to-Home-Screen (iOS) -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="RAM" />
+  <meta name="theme-color" content="#0B2545" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -34,6 +43,22 @@
     .navitem.active { color:var(--navy); }
     .navicon svg { width:22px; height:22px; display:block; }
     .navlabel { font-size:0.57rem; font-weight:600; white-space:nowrap; }
+
+    /* One-time "Add to Home Screen" hint */
+    .a2hs { position:fixed; left:16px; right:16px; bottom:calc(82px + env(safe-area-inset-bottom));
+            max-width:360px; margin:0 auto; z-index:60; background:var(--navy); color:#fff;
+            border-radius:14px; box-shadow:0 12px 32px rgba(11,37,69,0.38); padding:14px 16px;
+            transform:translateY(16px); opacity:0; transition:transform .28s ease, opacity .28s ease; }
+    .a2hs.show { transform:translateY(0); opacity:1; }
+    .a2hs-body { display:flex; align-items:center; gap:12px; }
+    .a2hs-icon { width:44px; height:44px; border-radius:11px; flex:none; }
+    .a2hs-text { font-size:0.84rem; line-height:1.4; display:flex; flex-direction:column; gap:2px; }
+    .a2hs-text b { font-weight:700; }
+    .a2hs-share { width:15px; height:15px; vertical-align:-3px; color:#9fc0ff; }
+    .a2hs-x { position:absolute; top:6px; right:9px; background:none; border:none; color:rgba(255,255,255,0.65);
+              font-size:1.35rem; line-height:1; cursor:pointer; padding:2px 5px; }
+    .a2hs-arrow { position:absolute; bottom:-7px; left:50%; transform:translateX(-50%) rotate(45deg);
+                  width:15px; height:15px; background:var(--navy); border-radius:3px; }
 
     /* Landing / profile */
     .profile-cover { height:96px; border-radius:var(--radius) var(--radius) 0 0;
@@ -1791,7 +1816,50 @@
       }
     });
 
+    // ---- One-time "Add to Home Screen" hint (iOS Safari only) ---------------
+    function isIosSafari() {
+      const ua = navigator.userAgent || "";
+      const iOS = /iphone|ipad|ipod/i.test(ua) ||
+                  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); // iPadOS
+      const otherBrowser = /CriOS|FxiOS|EdgiOS|OPiOS|mercury/i.test(ua); // Chrome/FF/Edge/Opera on iOS
+      return iOS && /WebKit/i.test(ua) && !otherBrowser;
+    }
+    function isStandalone() {
+      return window.navigator.standalone === true ||
+             (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    }
+    function maybeShowA2HS() {
+      // Skip unless we're in iOS Safari, not already installed, and not dismissed before.
+      if (!isIosSafari() || isStandalone()) return;
+      try { if (localStorage.getItem("ram_a2hs_dismissed") === "1") return; } catch (e) {}
+      if (document.getElementById("a2hs-hint")) return;
+
+      const share = '<svg class="a2hs-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        + '<path d="M12 16V4M8 8l4-4 4 4"/><path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7"/></svg>';
+      const el = document.createElement("div");
+      el.id = "a2hs-hint";
+      el.className = "a2hs";
+      el.innerHTML =
+          '<button class="a2hs-x" aria-label="Dismiss">×</button>'
+        + '<div class="a2hs-body">'
+        +   '<img src="apple-touch-icon.png" class="a2hs-icon" alt="" onerror="this.style.display=\'none\'" />'
+        +   '<div class="a2hs-text"><b>Add RAM to your Home Screen</b>'
+        +     '<span>Tap '+share+' Share below, then <b>Add to Home Screen</b>.</span></div>'
+        + '</div>'
+        + '<div class="a2hs-arrow"></div>';
+      document.body.appendChild(el);
+
+      el.querySelector(".a2hs-x").addEventListener("click", () => {
+        try { localStorage.setItem("ram_a2hs_dismissed", "1"); } catch (e) {}
+        el.classList.remove("show");
+        setTimeout(() => el.remove(), 280);
+      });
+      requestAnimationFrame(() => el.classList.add("show"));
+    }
+
     boot();
+    setTimeout(maybeShowA2HS, 1200);
   </script>
 </body>
 </html>
