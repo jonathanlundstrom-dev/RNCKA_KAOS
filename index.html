@@ -106,10 +106,36 @@
     .filters { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
     .filt { font-family:inherit; font-size:0.82rem; padding:8px 10px; border:1px solid var(--line);
             border-radius:9px; background:#fff; color:var(--ink); }
-    .count { font-size:0.76rem; color:var(--muted); margin:0 0 10px; }
+    .count { font-size:0.76rem; color:var(--muted); margin:0; }
+
+    /* Results header with view toggle */
+    .results-head { display:flex; align-items:center; justify-content:space-between; margin:0 0 12px; gap:10px; }
+    .viewtoggle { display:inline-flex; background:#eef1f5; border:1px solid var(--line); border-radius:9px; padding:2px; flex:none; }
+    .vt { display:inline-flex; align-items:center; gap:5px; font-family:inherit; font-size:0.74rem; font-weight:600;
+          color:var(--muted); background:none; border:none; border-radius:7px; padding:5px 10px; cursor:pointer; }
+    .vt svg { opacity:0.8; }
+    .vt.on { background:#fff; color:var(--navy); box-shadow:0 1px 3px rgba(11,37,69,0.12); }
 
     .list { display:grid; grid-template-columns:1fr; gap:12px; }
     @media (min-width:720px) { .list { grid-template-columns:1fr 1fr; } }
+
+    /* List (row) view */
+    .rows { display:flex; flex-direction:column; background:#fff; border:1px solid var(--line);
+            border-radius:var(--radius); overflow:hidden; }
+    .lrow { display:flex; align-items:center; gap:12px; padding:13px 14px; border-bottom:1px solid var(--line);
+            cursor:pointer; background:#fff; }
+    .lrow:last-child { border-bottom:none; }
+    .lrow:active { background:#f4f6f9; }
+    .lrow-dot { width:10px; height:10px; border-radius:50%; flex:none; }
+    .lrow-main { flex:1; min-width:0; }
+    .lrow-name { font-size:0.92rem; font-weight:600; color:var(--ink); display:flex; align-items:center; gap:7px;
+                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .lrow-sub { font-size:0.76rem; color:var(--muted); margin-top:2px;
+                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .lrow.lost .lrow-name { text-decoration:line-through; color:var(--muted); }
+    .lrow-side { flex:none; display:flex; align-items:center; }
+    .lrow-chev { color:var(--muted); font-size:1.25rem; line-height:1; }
+    .lrow-flag { width:7px; height:7px; border-radius:50%; background:var(--gold); flex:none; }
 
     .btn { font-family:inherit; font-size:0.85rem; font-weight:600; border-radius:10px;
            padding:10px 16px; border:1px solid transparent; cursor:pointer; }
@@ -616,7 +642,15 @@
                     cpId:null, cpEditId:null, cpSearch:"", cpStale:false,
                     cpSegment:"", cpRegion:"", cpOwner:"", dashRegion:"", dashReps:[], dashSegment:"",
                     callLogCpId:null,
+                    acctView: loadViewPref("ram_acctView"), cpView: loadViewPref("ram_cpView"),
                     callLog:{ type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" } };
+
+    // Remembered card/list preference (falls back to cards).
+    function loadViewPref(key) {
+      try { const v = localStorage.getItem(key); return (v === "list" || v === "card") ? v : "card"; }
+      catch (e) { return "card"; }
+    }
+    function saveViewPref(key, mode) { try { localStorage.setItem(key, mode); } catch (e) {} }
 
     // A fresh, empty call-log draft.
     function emptyCallLog() {
@@ -777,6 +811,32 @@
         + '</article>';
     }
 
+    // Card / List segmented toggle. target is "acct" or "cp".
+    function viewToggle(target, current) {
+      const grid = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>';
+      const rows = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="3" y="4" width="18" height="4" rx="1.5"/><rect x="3" y="10" width="18" height="4" rx="1.5"/><rect x="3" y="16" width="18" height="4" rx="1.5"/></svg>';
+      const opt = (mode, label, icon) =>
+        '<button class="vt'+(current===mode?' on':'')+'" data-action="set-view" data-target="'+target+'" data-mode="'+mode+'">'+icon+label+'</button>';
+      return '<div class="viewtoggle">'+opt("card","Cards",grid)+opt("list","List",rows)+'</div>';
+    }
+
+    // Compact one-line account row (list view).
+    function accountRow(a) {
+      const lost = a.status === "lost";
+      const color = STAGE_COLORS[a.stage];
+      const staleDot = needsUpdate(a) ? '<span class="lrow-flag" title="Needs updating"></span>' : "";
+      const sub = a.segment + ' · Stage ' + a.stage + ' · ' + repName(a.ownerId)
+                + (isManager() ? ' · ' + repRegion(a.ownerId) : '');
+      const side = lost ? '<span class="chip lost">Lost</span>' : '<span class="lrow-chev">›</span>';
+      return ''
+        + '<div class="lrow'+(lost?' lost':'')+'" data-action="open" data-id="'+a.id+'">'
+        +   '<span class="lrow-dot" style="background:'+color+'"></span>'
+        +   '<div class="lrow-main"><div class="lrow-name">'+esc(a.accountName)+staleDot+'</div>'
+        +     '<div class="lrow-sub">'+esc(sub)+'</div></div>'
+        +   '<div class="lrow-side">'+side+'</div>'
+        + '</div>';
+    }
+
     function listView() {
       const f = state.filters;
       const title = isManager() ? "Pipeline — all reps" : "My accounts";
@@ -820,10 +880,16 @@
         banner = '<div class="alert-banner active" data-action="toggle-stale">Showing accounts that need updating — tap to clear</div>';
       else if (staleCount > 0)
         banner = '<div class="alert-banner" data-action="toggle-stale">'+staleCount+' account'+(staleCount>1?'s':'')+' need updating — no note or stage change in 2 weeks</div>';
-      const cards = data.length
-        ? data.map(accountCard).join("")
+      const layout = state.acctView === "list" ? "list" : "card";
+      const body = data.length
+        ? (layout === "list"
+            ? '<div class="rows">' + data.map(accountRow).join("") + '</div>'
+            : '<div class="list">' + data.map(accountCard).join("") + '</div>')
         : '<p style="color:var(--muted)">No accounts match these filters.</p>';
-      el.innerHTML = banner + '<p class="count">Showing '+data.length+' of '+total+'</p><div class="list">'+cards+'</div>';
+      el.innerHTML = banner
+        + '<div class="results-head"><p class="count">Showing '+data.length+' of '+total+'</p>'
+        +   viewToggle("acct", layout) + '</div>'
+        + body;
     }
 
     function teamView() {
@@ -1130,6 +1196,21 @@
         + '</article>';
     }
 
+    // Compact one-line call-point row (list view).
+    function callPointRow(c) {
+      const stale = needsCall(c);
+      const sub = c.segment + ' · ' + repName(c.ownerId) + ' · '
+                + (c.lastCall ? 'Last ' + fmtDate(c.lastCall) : 'No calls yet');
+      const side = stale ? '<span class="chip stale">Needs a call</span>' : '<span class="lrow-chev">›</span>';
+      return ''
+        + '<div class="lrow" data-action="cp-open" data-id="'+c.id+'">'
+        +   '<span class="lrow-dot" style="background:'+(stale?'var(--gold)':'var(--line)')+'"></span>'
+        +   '<div class="lrow-main"><div class="lrow-name">'+esc(c.name)+'</div>'
+        +     '<div class="lrow-sub">'+esc(sub)+'</div></div>'
+        +   '<div class="lrow-side">'+side+'</div>'
+        + '</div>';
+    }
+
     function callPointsView() {
       const title = isManager() ? "Call Points — all reps" : "My call points";
       const segOpts = '<option value="">All segments</option>' + SEGMENTS.map(s =>
@@ -1166,10 +1247,16 @@
         banner = '<div class="alert-banner active" data-action="cp-toggle-stale">Showing call points needing a call — tap to clear</div>';
       else if (staleCount > 0)
         banner = '<div class="alert-banner" data-action="cp-toggle-stale">'+staleCount+' call point'+(staleCount>1?'s':'')+' need a call — none logged in over 4 weeks</div>';
-      const cards = data.length
-        ? data.map(callPointCard).join("")
+      const layout = state.cpView === "list" ? "list" : "card";
+      const body = data.length
+        ? (layout === "list"
+            ? '<div class="rows">' + data.map(callPointRow).join("") + '</div>'
+            : '<div class="list">' + data.map(callPointCard).join("") + '</div>')
         : '<p style="color:var(--muted)">No call points match.</p>';
-      el.innerHTML = banner + '<p class="count">Showing '+data.length+' of '+total+'</p><div class="list">'+cards+'</div>';
+      el.innerHTML = banner
+        + '<div class="results-head"><p class="count">Showing '+data.length+' of '+total+'</p>'
+        +   viewToggle("cp", layout) + '</div>'
+        + body;
     }
 
     function cpDetailView() {
@@ -1634,6 +1721,11 @@
       else if (action === "nav-dashboard")  { openPerfDashboard(); }
       else if (action === "avatar-edit")    { document.getElementById("avatar-input").click(); }
       else if (action === "toggle-stale") { state.filters.stale = !state.filters.stale; renderResults(); }
+      else if (action === "set-view") {
+        const target = el.dataset.target, mode = el.dataset.mode;
+        if (target === "acct") { state.acctView = mode; saveViewPref("ram_acctView", mode); renderResults(); }
+        else                   { state.cpView   = mode; saveViewPref("ram_cpView", mode);   renderCpResults(); }
+      }
       else if (action === "add-note")     { addNote(el.dataset.id); }
       else if (action === "add-photo")    { document.getElementById("photo-input").click(); }
       else if (action === "del-photo")    {
