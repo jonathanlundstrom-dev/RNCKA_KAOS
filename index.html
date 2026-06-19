@@ -30,10 +30,10 @@
                  padding:8px 6px calc(8px + env(safe-area-inset-bottom));
                  box-shadow:0 -2px 12px rgba(11,37,69,0.05); }
     .navitem { background:none; border:none; cursor:pointer; font-family:inherit; flex:1;
-               display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted); padding:4px 6px; }
+               display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted); padding:4px 3px; }
     .navitem.active { color:var(--navy); }
-    .navicon svg { width:23px; height:23px; display:block; }
-    .navlabel { font-size:0.6rem; font-weight:600; }
+    .navicon svg { width:22px; height:22px; display:block; }
+    .navlabel { font-size:0.57rem; font-weight:600; white-space:nowrap; }
 
     /* Landing / profile */
     .profile-cover { height:96px; border-radius:var(--radius) var(--radius) 0 0;
@@ -265,6 +265,11 @@
     const SUPABASE_ANON_KEY = "sb_publishable_X6Xvz0GUfHndHsUxOZgfyw_7y2m2h2M";
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // ---- NCRAM Performance Dashboard ----------------------------------------
+    // The "Dashboard" tab in the bottom nav opens this address in a new tab.
+    // Paste the live web address of your Performance Dashboard between the quotes.
+    const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
+
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     const BI_SUBCATEGORIES = ["White Collar", "Blue Collar"];
     const FMCS = ["Aramark", "Sodexo", "Compass Group", "Other"];
@@ -338,6 +343,7 @@
       wins:     '<svg '+SVG+'><path d="M8 4h8v5a4 4 0 01-8 0z"/><path d="M8 5H5v1.5a3 3 0 003 2.6M16 5h3v1.5a3 3 0 01-3 2.6"/><path d="M12 13v3M9.5 20h5M10 16h4"/></svg>',
       team:     '<svg '+SVG+'><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0111 0"/><path d="M16.5 5.2a3.2 3.2 0 010 5.6M20.5 19a5.5 5.5 0 00-4.2-5.3"/></svg>',
       camera:   '<svg '+SVG+' width="14" height="14"><path d="M5 8h2.5L9 6h6l1.5 2H19v10H5z"/><circle cx="12" cy="13" r="3"/></svg>',
+      dashboard:'<svg '+SVG+'><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
     };
 
     /* ============================================================ DATA */
@@ -1249,6 +1255,13 @@
       if (v === "team") return "team";
       return "home";
     }
+    function openPerfDashboard() {
+      if (!PERF_DASHBOARD_URL) {
+        alert("The Performance Dashboard address hasn't been set yet. Add it to PERF_DASHBOARD_URL near the top of the file.");
+        return;
+      }
+      window.open(PERF_DASHBOARD_URL, "_blank", "noopener");
+    }
     function renderBottomNav() {
       const items = [
         { id:"home",       label:"Home",        icon:ICONS.home },
@@ -1257,6 +1270,7 @@
         { id:"wins",       label:"Wins",        icon:ICONS.wins },
       ];
       if (isManager()) items.push({ id:"team", label:"Team", icon:ICONS.team });
+      items.push({ id:"dashboard", label:"Dashboard", icon:ICONS.dashboard });
       const active = currentSection();
       document.getElementById("bottomnav").innerHTML = items.map(it =>
         '<button class="navitem'+(active===it.id?' active':'')+'" data-action="nav-'+it.id+'">'
@@ -1391,6 +1405,7 @@
       else if (action === "nav-callpoints") { state.view = "callpoints"; state.cpId = null; render(); }
       else if (action === "nav-wins")       { state.view = "wins"; render(); }
       else if (action === "nav-team")       { state.view = "team"; render(); }
+      else if (action === "nav-dashboard")  { openPerfDashboard(); }
       else if (action === "avatar-edit")    { document.getElementById("avatar-input").click(); }
       else if (action === "toggle-stale") { state.filters.stale = !state.filters.stale; renderResults(); }
       else if (action === "add-note")     { addNote(el.dataset.id); }
