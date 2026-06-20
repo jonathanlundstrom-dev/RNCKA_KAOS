@@ -192,6 +192,19 @@
     .act:last-child { border-bottom:none; }
     .act-date { font-family:"DM Mono",monospace; font-size:0.74rem; color:var(--muted); white-space:nowrap; flex:none; }
 
+    /* Tappable phone / email */
+    .rowlink { color:var(--navy); font-weight:600; text-decoration:none; }
+    .rowlink:active { opacity:0.6; }
+
+    /* Activity timeline */
+    .timeline { margin-top:12px; }
+    .tl-item { position:relative; padding:0 0 16px 20px; border-left:2px solid var(--line); }
+    .tl-item:last-child { border-left-color:transparent; padding-bottom:0; }
+    .tl-dot { position:absolute; left:-6px; top:2px; width:10px; height:10px; border-radius:50%;
+              background:var(--gold); border:2px solid #fff; box-shadow:0 0 0 1px var(--line); }
+    .tl-date { font-family:"DM Mono",monospace; font-size:0.72rem; color:var(--muted); margin-bottom:3px; }
+    .tl-text { font-size:0.9rem; color:var(--ink); line-height:1.45; }
+
     /* Call log items (richer than plain activity) */
     .act.call-log { flex-direction:column; gap:6px; }
     .call-log-top { display:flex; align-items:center; gap:8px; }
@@ -661,7 +674,7 @@
                     cpSegment:"", cpRegion:"", cpOwner:"", dashRegion:"", dashReps:[], dashSegment:"",
                     callLogCpId:null,
                     acctView: loadViewPref("ram_acctView"), cpView: loadViewPref("ram_cpView"),
-                    callLog:{ type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" } };
+                    callLog:{ date:"", type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" } };
 
     // Remembered card/list preference (falls back to cards).
     function loadViewPref(key) {
@@ -672,7 +685,7 @@
 
     // A fresh, empty call-log draft.
     function emptyCallLog() {
-      return { type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" };
+      return { date:todayStr(), type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" };
     }
 
     /* =========================================================== VIEWS */
@@ -799,6 +812,16 @@
       const r = parseInt(c.substr(0,2),16), g = parseInt(c.substr(2,2),16), b = parseInt(c.substr(4,2),16);
       return (0.299*r + 0.587*g + 0.114*b) > 130 ? "#1a2432" : "#fff";
     }
+    // Tappable phone / email for detail rows.
+    function telLink(phone) {
+      if (!phone) return "";
+      return '<a class="rowlink" href="tel:'+phone.replace(/[^\d+]/g, "")+'">'+esc(phone)+'</a>';
+    }
+    function mailLink(email) {
+      if (!email) return "";
+      return '<a class="rowlink" href="mailto:'+esc(email)+'">'+esc(email)+'</a>';
+    }
+
     // Colored segment pill (the segment color key).
     function segmentPill(s) {
       const col = segColor(s);
@@ -1012,10 +1035,13 @@
           + (a.nextStepDate ? ' · due '+fmtDate(a.nextStepDate)+(overdue?' (overdue)':'') : '') + '</div>';
       }
 
-      // Activity log
-      const activityList = a.activity.length
-        ? '<div class="activity">' + a.activity.slice().reverse().map(n =>
-            '<div class="act"><span class="act-date">'+fmtDate(n.date)+'</span><span>'+esc(n.text)+'</span></div>').join("") + '</div>'
+      // Activity timeline — one chronological feed (newest first).
+      const acts = a.activity.slice().sort((x, y) => (y.date || "").localeCompare(x.date || ""));
+      const activityList = acts.length
+        ? '<div class="timeline">' + acts.map(n =>
+            '<div class="tl-item"><span class="tl-dot"></span>'
+            + '<div class="tl-body"><div class="tl-date">'+fmtDate(n.date)+'</div>'
+            + '<div class="tl-text">'+esc(n.text)+'</div></div></div>').join("") + '</div>'
         : '<p style="color:var(--muted);font-size:0.85rem;margin-top:8px">No activity logged yet.</p>';
       const noteAdd = editable
         ? '<div class="note-add"><input id="note-input" type="text" placeholder="Log a touchpoint…" />'
@@ -1057,7 +1083,7 @@
         +   (lost ? row("Lost reason", esc(a.lostReason)) : "")
         +   (lost && a.lostDate ? row("Date lost", fmtDate(a.lostDate)) : "")
         +   row("Address", addressLine) + row("Primary contact", esc(a.primaryContact))
-        +   row("Phone", esc(a.phone)) + row("Email", esc(a.email))
+        +   row("Phone", telLink(a.phone)) + row("Email", mailLink(a.email))
         + '</div>'
         + editBtn
         + '<div class="form-section">Activity</div>' + noteAdd + activityList
@@ -1334,7 +1360,7 @@
         : "";
 
       const callList = c.calls.length
-        ? '<div class="activity">' + c.calls.slice().reverse().map(callLogItem).join("") + '</div>'
+        ? '<div class="activity">' + c.calls.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")).map(callLogItem).join("") + '</div>'
         : '<p style="color:var(--muted);font-size:0.85rem;margin-top:8px">No calls logged yet.</p>';
       const logAdd = editable
         ? '<div class="form-actions"><button class="btn btn-primary" data-action="log-call" data-id="'+c.id+'">+ Log a call</button></div>'
@@ -1367,7 +1393,7 @@
         +   (c.fmcManaged ? row("Sector/LOB", esc(c.sectorLob)) : "")
         +   row("Owner", repName(c.ownerId)) + row("Region", repRegion(c.ownerId))
         +   row("Address", addressLine) + row("Primary contact", esc(c.primaryContact))
-        +   row("Phone", esc(c.phone)) + row("Email", esc(c.email))
+        +   row("Phone", telLink(c.phone)) + row("Email", mailLink(c.email))
         +   row("Last call", c.lastCall ? fmtDate(c.lastCall) : "")
         + '</div>'
         + editBtn
@@ -1527,6 +1553,8 @@
         + '<p class="cp-log-sub">'+esc(c.name)+'</p>'
         + '<div class="form-msg" id="cl-msg"></div>'
 
+        + '<div class="field"><label>Date of call</label>'
+        +   '<input id="cl-date" type="date" value="'+esc(d.date)+'" max="'+todayStr()+'" /></div>'
         + '<div class="field"><label>Call type</label>'
         +   '<input id="cl-type" list="cl-type-list" value="'+esc(d.type)+'" placeholder="Phone, email, in-person…" />'
         +   '<datalist id="cl-type-list">'+typeSugg+'</datalist></div>'
@@ -1561,6 +1589,7 @@
     function syncCallLogDraft() {
       const d = state.callLog;
       const get = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+      const dt = get("cl-date");     if (dt !== undefined) d.date = dt;
       const t  = get("cl-type");     if (t  !== undefined) d.type = t;
       const n  = get("cl-note");     if (n  !== undefined) d.note = n;
       const at = get("cl-act-type"); if (at !== undefined) d.actType = at;
@@ -1596,19 +1625,20 @@
         newSkus: d.skus,
         activation: d.actDone ? { type:d.actType, notes:(d.actNote || "").trim() } : null,
       };
-      const today = todayStr();
+      const when = d.date || todayStr();
       const id = state.callLogCpId;
       const { data, error } = await sb.from("call_logs")
-        .insert({ call_point_id:id, note, call_type:d.type || null, execution, logged_at:today, author_id:currentUser.id })
+        .insert({ call_point_id:id, note, call_type:d.type || null, execution, logged_at:when, author_id:currentUser.id })
         .select().single();
       if (error) { document.getElementById("cl-msg").textContent = "Couldn't save: " + error.message; return; }
-      // Logging a call resets the call point's 4-week "needs a call" clock.
-      await sb.from("call_points").update({ last_call:today }).eq("id", id);
+      // last_call tracks the most recent call, so a back-dated entry won't pull it earlier.
       const c = getCallPoint(id);
+      const newLast = (c && c.lastCall && c.lastCall > when) ? c.lastCall : when;
+      await sb.from("call_points").update({ last_call:newLast }).eq("id", id);
       if (c) {
         c.calls.push({ id:data.id, date:data.logged_at, note:data.note,
                        callType:data.call_type||"", execution:data.execution||{} });
-        c.lastCall = today;
+        c.lastCall = newLast;
       }
       state.callLog = emptyCallLog();
       state.view = "cp-detail";
