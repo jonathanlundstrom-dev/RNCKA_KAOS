@@ -101,6 +101,16 @@
     .err-toast { position:fixed; top:calc(8px + env(safe-area-inset-top)); left:12px; right:12px; z-index:90;
                  background:#b3322a; color:#fff; font-size:0.8rem; line-height:1.4; padding:11px 14px;
                  border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,0.25); }
+
+    /* Contact blocks in forms */
+    .contact-row { border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:10px; background:#fafbfc; }
+    .contact-row-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .contact-row-lbl { font-size:0.78rem; font-weight:700; color:var(--navy); }
+    .contact-del { background:none; border:none; color:#b3322a; font-size:0.78rem; font-weight:600; cursor:pointer; padding:2px 4px; }
+    .contact-row input { width:100%; font-family:inherit; font-size:0.95rem; padding:10px 12px; margin-bottom:8px;
+                         border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); }
+    .contact-row input:last-child { margin-bottom:0; }
+    .addcontact { margin-bottom:8px; }
     .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
     .toolbar-title { margin:0; font-size:1rem; font-weight:600; }
 
@@ -374,7 +384,7 @@
     const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
 
     // Bump this on each deploy so you can confirm at a glance which build is live.
-    const APP_BUILD = "2026-06-20a";
+    const APP_BUILD = "2026-06-20b";
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     // Color key per segment, aligned to the standard circle-emoji colors so the
@@ -500,7 +510,7 @@
       accountName:"account_name", segment:"segment", biSubCategory:"bi_subcategory",
       fmcManaged:"fmc_managed", fmcName:"fmc_name", sectorLob:"sector_lob", stage:"stage", status:"status",
       annualVolume:"annual_volume", address:"address", city:"city", state:"state", zip:"zip",
-      primaryContact:"primary_contact", phone:"phone", email:"email",
+      primaryContact:"primary_contact", phone:"phone", email:"email", contacts:"contacts",
       nextStep:"next_step", nextStepDate:"next_step_date", wonDate:"won_date",
       lostReason:"lost_reason", lostDate:"lost_date", lastTouch:"last_touch", ownerId:"owner_id",
       photos:"photos",
@@ -535,7 +545,7 @@
         fmcManaged:!!r.fmc_managed, fmcName:r.fmc_name, sectorLob:r.sector_lob||"", stage:r.stage, status:r.status || "active",
         annualVolume:r.annual_volume || 0,
         address:r.address||"", city:r.city||"", state:r.state||"", zip:r.zip||"",
-        primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"",
+        primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"", contacts:contactsFromRow(r),
         nextStep:r.next_step||"", nextStepDate:r.next_step_date||"",
         wonDate:r.won_date||"", lostReason:r.lost_reason||"", lostDate:r.lost_date||"",
         lastTouch:r.last_touch || todayStr(), ownerId:r.owner_id,
@@ -611,7 +621,7 @@
     const CALLPOINT_FIELDS = {
       name:"name", segment:"segment", fmcManaged:"fmc_managed", fmcName:"fmc_name", sectorLob:"sector_lob",
       address:"address", city:"city", state:"state", zip:"zip",
-      primaryContact:"primary_contact", phone:"phone", email:"email",
+      primaryContact:"primary_contact", phone:"phone", email:"email", contacts:"contacts",
       lastCall:"last_call", ownerId:"owner_id",
       photos:"photos",
     };
@@ -638,7 +648,7 @@
         id:r.id, name:r.name, segment:r.segment,
         fmcManaged:!!r.fmc_managed, fmcName:r.fmc_name, sectorLob:r.sector_lob||"",
         address:r.address||"", city:r.city||"", state:r.state||"", zip:r.zip||"",
-        primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"",
+        primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"", contacts:contactsFromRow(r),
         lastCall:r.last_call||"", ownerId:r.owner_id,
         createdAt:r.created_at, updatedAt:r.updated_at,
         photos: r.photos || [], calls: callLogRowsToItems(r.call_logs),
@@ -837,6 +847,52 @@
     function mailLink(email) {
       if (!email) return "";
       return '<a class="rowlink" href="mailto:'+esc(email)+'">'+esc(email)+'</a>';
+    }
+
+    // ---- Contacts (one or more per account / call point) --------------------
+    // Read from the jsonb column; fall back to the legacy single-contact columns
+    // so records created before this feature still show their contact.
+    function contactsFromRow(r) {
+      const arr = Array.isArray(r.contacts) ? r.contacts : [];
+      if (arr.length) return arr;
+      if (r.primary_contact || r.phone || r.email)
+        return [{ name:r.primary_contact||"", phone:r.phone||"", email:r.email||"" }];
+      return [];
+    }
+    // One editable contact block in a form. First one is the primary.
+    function contactRowHtml(c, idx) {
+      c = c || {};
+      const label = idx === 0 ? "Primary contact" : "Additional contact";
+      const del = idx === 0 ? "" : '<button type="button" class="contact-del" data-action="remove-contact">Remove</button>';
+      return '<div class="contact-row">'
+        + '<div class="contact-row-head"><span class="contact-row-lbl">'+label+'</span>'+del+'</div>'
+        + '<input class="c-name" type="text" placeholder="Contact name" value="'+esc(c.name||"")+'" />'
+        + '<input class="c-phone" type="tel" placeholder="Phone" value="'+esc(c.phone||"")+'" />'
+        + '<input class="c-email" type="email" placeholder="Email" value="'+esc(c.email||"")+'" />'
+        + '</div>';
+    }
+    function contactRowsHtml(contacts) {
+      const list = (contacts && contacts.length) ? contacts : [{}];
+      return list.map((c, i) => contactRowHtml(c, i)).join("");
+    }
+    // Pull every contact block out of a form container into an array.
+    function readContacts(containerId) {
+      const out = [];
+      document.querySelectorAll("#"+containerId+" .contact-row").forEach(r => {
+        const name  = (r.querySelector(".c-name").value  || "").trim();
+        const phone = (r.querySelector(".c-phone").value || "").trim();
+        const email = (r.querySelector(".c-email").value || "").trim();
+        if (name || phone || email) out.push({ name, phone, email });
+      });
+      return out;
+    }
+    // Read-only contact list for a detail screen.
+    function contactsDetailHtml(contacts) {
+      if (!contacts || !contacts.length) return "";
+      const rw = (k, v) => v ? '<div class="row"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>' : "";
+      return contacts.map((c, i) =>
+        rw(i === 0 ? "Primary contact" : "Additional contact", esc(c.name))
+        + rw("Phone", telLink(c.phone)) + rw("Email", mailLink(c.email))).join("");
     }
 
     // Colored segment pill (the segment color key).
@@ -1104,8 +1160,8 @@
         +   (a.stage===5 && a.wonDate ? row("Date won", fmtDate(a.wonDate)) : "")
         +   (lost ? row("Lost reason", esc(a.lostReason)) : "")
         +   (lost && a.lostDate ? row("Date lost", fmtDate(a.lostDate)) : "")
-        +   row("Address", addressLine) + row("Primary contact", esc(a.primaryContact))
-        +   row("Phone", telLink(a.phone)) + row("Email", mailLink(a.email))
+        +   row("Address", addressLine)
+        +   contactsDetailHtml(a.contacts)
         + '</div>'
         + editBtn
         + '<div class="form-section">Activity</div>' + noteAdd + activityList
@@ -1182,10 +1238,9 @@
         +   '<div class="field"><label>State</label><input id="f-state" type="text" value="'+esc(g("state"))+'" placeholder="NC" /></div>'
         +   '<div class="field"><label>Zip</label><input id="f-zip" type="text" value="'+esc(g("zip"))+'" /></div>'
         + '</div>'
-        + '<div class="form-section">Primary contact</div>'
-        + '<div class="field"><label>Contact name</label><input id="f-contact" type="text" value="'+esc(g("primaryContact"))+'" /></div>'
-        + '<div class="field"><label>Phone</label><input id="f-phone" type="tel" value="'+esc(g("phone"))+'" /></div>'
-        + '<div class="field"><label>Email</label><input id="f-email" type="email" value="'+esc(g("email"))+'" /></div>'
+        + '<div class="form-section">Contacts</div>'
+        + '<div id="f-contacts">' + contactRowsHtml(account ? account.contacts : []) + '</div>'
+        + '<button type="button" class="btn btn-ghost addcontact" data-action="add-contact" data-target="f-contacts">+ Add Additional Contact</button>'
         + '<div class="form-actions">'
         +   '<button class="btn btn-primary" data-action="save">'+(isEdit?'Save changes':'Save account')+'</button>'
         +   '<button class="btn btn-ghost" data-action="cancel-form">Cancel</button>'
@@ -1209,6 +1264,8 @@
         : null;
       const status = v("f-status") || "active";
       const existing = state.editingId ? getAccount(state.editingId) : null;
+      const contacts = readContacts("f-contacts");
+      const primary = contacts[0] || {};
 
       const data = {
         accountName: name, segment,
@@ -1222,7 +1279,8 @@
         nextStepDate: v("f-nextdate"),
         address:v("f-address").trim(), city:v("f-city").trim(),
         state:v("f-state").trim(), zip:v("f-zip").trim(),
-        primaryContact:v("f-contact").trim(), phone:v("f-phone").trim(), email:v("f-email").trim(),
+        contacts,
+        primaryContact: primary.name || "", phone: primary.phone || "", email: primary.email || "",
       };
 
       // Auto-stamp won/lost dates the first time they happen.
@@ -1396,8 +1454,8 @@
         +   row("FMC managed", c.fmcManaged ? "Yes" : "No") + row("FMC", esc(c.fmcName))
         +   (c.fmcManaged ? row("Sector/LOB", esc(c.sectorLob)) : "")
         +   row("Owner", repName(c.ownerId)) + row("Region", repRegion(c.ownerId))
-        +   row("Address", addressLine) + row("Primary contact", esc(c.primaryContact))
-        +   row("Phone", telLink(c.phone)) + row("Email", mailLink(c.email))
+        +   row("Address", addressLine)
+        +   contactsDetailHtml(c.contacts)
         +   row("Last call", c.lastCall ? fmtDate(c.lastCall) : "")
         + '</div>'
         + editBtn
@@ -1449,10 +1507,9 @@
         +   '<div class="field"><label>State</label><input id="cp-state" type="text" value="'+esc(g("state"))+'" placeholder="NC" /></div>'
         +   '<div class="field"><label>Zip</label><input id="cp-zip" type="text" value="'+esc(g("zip"))+'" /></div>'
         + '</div>'
-        + '<div class="form-section">Primary contact</div>'
-        + '<div class="field"><label>Contact name</label><input id="cp-contact" type="text" value="'+esc(g("primaryContact"))+'" /></div>'
-        + '<div class="field"><label>Phone</label><input id="cp-phone" type="tel" value="'+esc(g("phone"))+'" /></div>'
-        + '<div class="field"><label>Email</label><input id="cp-email" type="email" value="'+esc(g("email"))+'" /></div>'
+        + '<div class="form-section">Contacts</div>'
+        + '<div id="cp-contacts">' + contactRowsHtml(cp ? cp.contacts : []) + '</div>'
+        + '<button type="button" class="btn btn-ghost addcontact" data-action="add-contact" data-target="cp-contacts">+ Add Additional Contact</button>'
         + '<div class="form-actions">'
         +   '<button class="btn btn-primary" data-action="cp-save">'+(isEdit?'Save changes':'Save call point')+'</button>'
         +   '<button class="btn btn-ghost" data-action="cp-cancel">Cancel</button>'
@@ -1473,13 +1530,16 @@
       const fmcName = fmcManaged
         ? (fmcPicked === "Other" ? (v("cp-fmcother").trim() || null) : (fmcPicked || null))
         : null;
+      const cpContacts = readContacts("cp-contacts");
+      const cpPrimary = cpContacts[0] || {};
       const data = {
         name, segment,
         fmcManaged, fmcName,
         sectorLob: fmcManaged ? (v("cp-sectorlob").trim() || null) : null,
         address:v("cp-address").trim(), city:v("cp-city").trim(),
         state:v("cp-state").trim(), zip:v("cp-zip").trim(),
-        primaryContact:v("cp-contact").trim(), phone:v("cp-phone").trim(), email:v("cp-email").trim(),
+        contacts: cpContacts,
+        primaryContact: cpPrimary.name || "", phone: cpPrimary.phone || "", email: cpPrimary.email || "",
       };
       // Owner: manager assigns via picker; rep owns their own. On edits too, so
       // a manager can reassign.
@@ -1890,6 +1950,11 @@
       else if (action === "log-acct-call") { state.acctLogId = el.dataset.id; state.acctLog = emptyAcctLog(); state.view = "acct-log"; render(); }
       else if (action === "alog-save")     { saveAcctCall(); }
       else if (action === "alog-cancel")   { state.acctLog = emptyAcctLog(); state.view = "detail"; render(); }
+      else if (action === "add-contact")   {
+        const box = document.getElementById(el.dataset.target);
+        if (box) box.insertAdjacentHTML("beforeend", contactRowHtml(null, box.querySelectorAll(".contact-row").length));
+      }
+      else if (action === "remove-contact") { const r = el.closest(".contact-row"); if (r) r.remove(); }
       else if (action === "add-photo")    { document.getElementById("photo-input").click(); }
       else if (action === "del-photo")    {
         const acct = getAccount(el.dataset.id);
