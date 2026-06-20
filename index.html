@@ -97,6 +97,10 @@
     .ring-label { font-size:0.72rem; color:var(--muted); margin-top:4px; }
 
     .wrap { padding:16px 16px 92px; max-width:1100px; margin:0 auto; }
+    .build-tag { text-align:center; color:var(--muted); font-size:0.66rem; margin:20px 0 4px; opacity:0.7; }
+    .err-toast { position:fixed; top:calc(8px + env(safe-area-inset-top)); left:12px; right:12px; z-index:90;
+                 background:#b3322a; color:#fff; font-size:0.8rem; line-height:1.4; padding:11px 14px;
+                 border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,0.25); }
     .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
     .toolbar-title { margin:0; font-size:1rem; font-weight:600; }
 
@@ -203,7 +207,11 @@
     .tl-dot { position:absolute; left:-6px; top:2px; width:10px; height:10px; border-radius:50%;
               background:var(--gold); border:2px solid #fff; box-shadow:0 0 0 1px var(--line); }
     .tl-date { font-family:"DM Mono",monospace; font-size:0.72rem; color:var(--muted); margin-bottom:3px; }
+    .tl-head { display:flex; align-items:center; gap:8px; margin-bottom:3px; }
+    .tl-head .tl-date { margin-bottom:0; }
     .tl-text { font-size:0.9rem; color:var(--ink); line-height:1.45; }
+    .tl-extra { font-size:0.82rem; color:var(--muted); margin-top:4px; }
+    .tl-tag { font-weight:700; color:var(--navy); margin-right:4px; }
 
     /* Call log items (richer than plain activity) */
     .act.call-log { flex-direction:column; gap:6px; }
@@ -364,6 +372,9 @@
     // The "Dashboard" tab in the bottom nav opens this address in a new tab.
     // Paste the live web address of your Performance Dashboard between the quotes.
     const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
+
+    // Bump this on each deploy so you can confirm at a glance which build is live.
+    const APP_BUILD = "2026-06-20a";
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     // Color key per segment, aligned to the standard circle-emoji colors so the
@@ -808,7 +819,8 @@
         +   '<button class="btn btn-ghost" data-action="add">+ New Pipeline Account</button>'
         +   '<button class="btn btn-ghost" data-action="cp-add">+ New Call Point</button>'
         + '</div>'
-        + (isManager() ? managerDashboard() : repDashboard());
+        + (isManager() ? managerDashboard() : repDashboard())
+        + '<p class="build-tag">Build '+APP_BUILD+'</p>';
     }
 
     // Readable text color for a filled pill, based on the color's luminance.
@@ -1241,24 +1253,6 @@
       render();
     }
 
-    async function addNote(id) {
-      const input = document.getElementById("note-input");
-      const text = input ? input.value.trim() : "";
-      if (!text) return;
-      const today = todayStr();
-      // 1. Save the note to its own table.
-      const { data, error } = await sb.from("account_activity")
-        .insert({ account_id:id, note:text, logged_at:today, author_id:currentUser.id })
-        .select().single();
-      if (error) { alert("Couldn't save note: " + error.message); return; }
-      // 2. A note counts as a touch — reset the account's "needs updating" clock.
-      await sb.from("accounts").update({ last_touch:today }).eq("id", id);
-      // 3. Mirror both changes into the cache so the screen matches.
-      const a = getAccount(id);
-      if (a) { a.activity.push({ id:data.id, date:data.logged_at, text:data.note }); a.lastTouch = today; }
-      render();
-    }
-
     /* =============================================== CALL POINT VIEWS */
     function callPointCard(c) {
       const stale = needsCall(c);
@@ -1655,6 +1649,69 @@
       render();
     }
 
+    // ---- Pipeline call log (accounts) ---------------------------------------
+    function acctLogView() {
+      const a = getAccount(state.acctLogId);
+      if (!a) return '<p>Account not found.</p>';
+      const d = state.acctLog;
+      const typeSugg = CALL_TYPES.map(t => '<option value="'+t+'"></option>').join("");
+      return ''
+        + '<button class="back" data-action="alog-cancel">‹ Cancel</button>'
+        + '<h2 class="detail-name">Log a call</h2>'
+        + '<p class="cp-log-sub">'+esc(a.accountName)+'</p>'
+        + '<div class="form-msg" id="al-msg"></div>'
+        + '<div class="field"><label>Date of call</label>'
+        +   '<input id="al-date" type="date" value="'+esc(d.date)+'" max="'+todayStr()+'" /></div>'
+        + '<div class="field"><label>Call type</label>'
+        +   '<input id="al-type" list="al-type-list" value="'+esc(d.type)+'" placeholder="Phone, email, in-person…" />'
+        +   '<datalist id="al-type-list">'+typeSugg+'</datalist></div>'
+        + '<div class="field"><label>What happened on the call?</label>'
+        +   '<textarea id="al-note" rows="3" placeholder="Notes from the call">'+esc(d.note)+'</textarea></div>'
+        + '<div class="field"><label>Action taken</label>'
+        +   '<textarea id="al-action" rows="2" placeholder="What you did or committed to">'+esc(d.action)+'</textarea></div>'
+        + '<div class="field"><label>Follow-up needed</label>'
+        +   '<textarea id="al-followup" rows="2" placeholder="What needs to happen next">'+esc(d.followUp)+'</textarea></div>'
+        + '<div class="form-actions">'
+        +   '<button class="btn btn-primary" data-action="alog-save">Save call</button>'
+        +   '<button class="btn btn-ghost" data-action="alog-cancel">Cancel</button>'
+        + '</div>';
+    }
+
+    async function saveAcctCall() {
+      const d = state.acctLog;
+      const get = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
+      d.date     = get("al-date")     ?? d.date;
+      d.type     = get("al-type")     ?? d.type;
+      d.note     = get("al-note")     ?? d.note;
+      d.action   = get("al-action")   ?? d.action;
+      d.followUp = get("al-followup") ?? d.followUp;
+      const note = (d.note || "").trim();
+      if (!note && !d.type && !(d.action || "").trim() && !(d.followUp || "").trim()) {
+        document.getElementById("al-msg").textContent = "Add a note or some detail before saving.";
+        return;
+      }
+      const when = d.date || todayStr();
+      const id = state.acctLogId;
+      const { data, error } = await sb.from("account_activity")
+        .insert({ account_id:id, note, call_type:d.type || null,
+                  action_taken:(d.action || "").trim() || null, follow_up:(d.followUp || "").trim() || null,
+                  logged_at:when, author_id:currentUser.id })
+        .select().single();
+      if (error) { document.getElementById("al-msg").textContent = "Couldn't save: " + error.message; return; }
+      // last_touch tracks the most recent touch, so a back-dated call won't pull it earlier.
+      const a = getAccount(id);
+      const newTouch = (a && a.lastTouch && a.lastTouch > when) ? a.lastTouch : when;
+      await sb.from("accounts").update({ last_touch:newTouch }).eq("id", id);
+      if (a) {
+        a.activity.push({ id:data.id, date:data.logged_at, text:data.note, callType:data.call_type||"",
+                          action:data.action_taken||"", followUp:data.follow_up||"" });
+        a.lastTouch = newTouch;
+      }
+      state.acctLog = emptyAcctLog();
+      state.view = "detail";
+      render();
+    }
+
     /* ========================================================== RENDER */
     function renderHeader() {
       const el = document.getElementById("role-pill");
@@ -1664,7 +1721,7 @@
     }
     function currentSection() {
       const v = state.view;
-      if (v === "list" || v === "detail" || v === "form") return "pipeline";
+      if (v === "list" || v === "detail" || v === "form" || v === "acct-log") return "pipeline";
       if (v === "callpoints" || v === "cp-detail" || v === "cp-form" || v === "cp-log") return "callpoints";
       if (v === "wins") return "wins";
       if (v === "team") return "team";
@@ -1699,6 +1756,7 @@
       if (state.view === "home")            app.innerHTML = landingView();
       else if (state.view === "list")       { app.innerHTML = listView(); renderResults(); }
       else if (state.view === "detail")     app.innerHTML = detailView();
+      else if (state.view === "acct-log")   app.innerHTML = acctLogView();
       else if (state.view === "form")       app.innerHTML = formView(state.editingId ? getAccount(state.editingId) : null);
       else if (state.view === "team")       app.innerHTML = teamView();
       else if (state.view === "wins")       app.innerHTML = winsView();
@@ -1829,7 +1887,9 @@
         if (target === "acct") { state.acctView = mode; saveViewPref("ram_acctView", mode); renderResults(); }
         else                   { state.cpView   = mode; saveViewPref("ram_cpView", mode);   renderCpResults(); }
       }
-      else if (action === "add-note")     { addNote(el.dataset.id); }
+      else if (action === "log-acct-call") { state.acctLogId = el.dataset.id; state.acctLog = emptyAcctLog(); state.view = "acct-log"; render(); }
+      else if (action === "alog-save")     { saveAcctCall(); }
+      else if (action === "alog-cancel")   { state.acctLog = emptyAcctLog(); state.view = "detail"; render(); }
       else if (action === "add-photo")    { document.getElementById("photo-input").click(); }
       else if (action === "del-photo")    {
         const acct = getAccount(el.dataset.id);
@@ -2054,6 +2114,20 @@
       });
       requestAnimationFrame(() => el.classList.add("show"));
     }
+
+    // On-screen error surfacing (handy while testing on a phone with no console).
+    function showErrToast(msg) {
+      const t = document.createElement("div");
+      t.className = "err-toast";
+      t.textContent = "⚠ " + msg;
+      t.addEventListener("click", () => t.remove());
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 9000);
+    }
+    window.addEventListener("error", (e) =>
+      showErrToast((e.message || "Script error") + (e.lineno ? " (line " + e.lineno + ")" : "")));
+    window.addEventListener("unhandledrejection", (e) =>
+      showErrToast("Async: " + ((e.reason && e.reason.message) || e.reason || "unknown")));
 
     boot();
     setTimeout(maybeShowA2HS, 1200);
