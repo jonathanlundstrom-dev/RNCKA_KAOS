@@ -513,7 +513,8 @@
       return (rows || [])
         .slice()
         .sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
-        .map(r => ({ id:r.id, date:r.logged_at, text:r.note }));
+        .map(r => ({ id:r.id, date:r.logged_at, text:r.note,
+                     callType:r.call_type||"", action:r.action_taken||"", followUp:r.follow_up||"" }));
     }
     // Database row → app object. Photos still live only in memory (Storage step);
     // activity now comes from the account_activity table when it's embedded.
@@ -672,9 +673,10 @@
     const state = { view:"home", selectedId:null, editingId:null, filters:{ ...DEFAULT_FILTERS },
                     cpId:null, cpEditId:null, cpSearch:"", cpStale:false, cpSort:"name",
                     cpSegment:"", cpRegion:"", cpOwner:"", dashRegion:"", dashReps:[], dashSegment:"",
-                    callLogCpId:null,
+                    callLogCpId:null, acctLogId:null,
                     acctView: loadViewPref("ram_acctView"), cpView: loadViewPref("ram_cpView"),
-                    callLog:{ date:"", type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" } };
+                    callLog:{ date:"", type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" },
+                    acctLog:{ date:"", type:"", note:"", action:"", followUp:"" } };
 
     // Remembered card/list preference (falls back to cards).
     function loadViewPref(key) {
@@ -686,6 +688,9 @@
     // A fresh, empty call-log draft.
     function emptyCallLog() {
       return { date:todayStr(), type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" };
+    }
+    function emptyAcctLog() {
+      return { date:todayStr(), type:"", note:"", action:"", followUp:"" };
     }
 
     /* =========================================================== VIEWS */
@@ -1038,14 +1043,19 @@
       // Activity timeline — one chronological feed (newest first).
       const acts = a.activity.slice().sort((x, y) => (y.date || "").localeCompare(x.date || ""));
       const activityList = acts.length
-        ? '<div class="timeline">' + acts.map(n =>
-            '<div class="tl-item"><span class="tl-dot"></span>'
-            + '<div class="tl-body"><div class="tl-date">'+fmtDate(n.date)+'</div>'
-            + '<div class="tl-text">'+esc(n.text)+'</div></div></div>').join("") + '</div>'
+        ? '<div class="timeline">' + acts.map(n => {
+            const chip = n.callType ? '<span class="call-type">'+esc(n.callType)+'</span>' : "";
+            let extra = "";
+            if (n.action)   extra += '<div class="tl-extra"><span class="tl-tag">Action</span> '+esc(n.action)+'</div>';
+            if (n.followUp) extra += '<div class="tl-extra"><span class="tl-tag">Follow-up</span> '+esc(n.followUp)+'</div>';
+            return '<div class="tl-item"><span class="tl-dot"></span><div class="tl-body">'
+              + '<div class="tl-head"><span class="tl-date">'+fmtDate(n.date)+'</span>'+chip+'</div>'
+              + (n.text ? '<div class="tl-text">'+esc(n.text)+'</div>' : '')
+              + extra + '</div></div>';
+          }).join("") + '</div>'
         : '<p style="color:var(--muted);font-size:0.85rem;margin-top:8px">No activity logged yet.</p>';
       const noteAdd = editable
-        ? '<div class="note-add"><input id="note-input" type="text" placeholder="Log a touchpoint…" />'
-          + '<button class="btn btn-ghost" data-action="add-note" data-id="'+a.id+'">Add</button></div>'
+        ? '<div class="form-actions"><button class="btn btn-primary" data-action="log-acct-call" data-id="'+a.id+'">+ Log a call</button></div>'
         : "";
 
       // Photos
