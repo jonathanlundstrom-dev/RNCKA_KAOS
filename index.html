@@ -27,6 +27,25 @@
 
     .topbar { position:sticky; top:0; z-index:20; background:#fff; border-bottom:1px solid var(--line);
               display:flex; align-items:center; justify-content:space-between; padding:14px 18px; }
+    .topbar-left { display:flex; align-items:center; gap:10px; }
+    .menu-btn { background:none; border:none; cursor:pointer; color:var(--navy); padding:2px; margin:-2px 0;
+                display:flex; align-items:center; border-radius:8px; }
+    .menu-btn:active { background:#f4f6f9; }
+    .menu-btn[hidden] { display:none; }
+    .menu-backdrop { position:fixed; inset:0; z-index:1; background:transparent; }
+    .menu-panel { position:absolute; top:calc(100% + 6px); left:8px; z-index:2; min-width:208px;
+                  background:#fff; border:1px solid var(--line); border-radius:14px; padding:6px;
+                  box-shadow:0 16px 44px rgba(11,37,69,0.20); animation:menuIn .14s ease; }
+    @keyframes menuIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+    .menu-item { display:flex; align-items:center; gap:12px; width:100%; background:none; border:none; cursor:pointer;
+                 font-family:inherit; font-size:0.92rem; font-weight:600; color:var(--ink); text-align:left;
+                 padding:11px 12px; border-radius:9px; }
+    .menu-item:active { background:#f4f6f9; }
+    .menu-item.on { background:#eef2f8; color:var(--navy); }
+    .menu-ic { display:flex; }
+    .menu-ic svg { width:20px; height:20px; display:block; color:var(--navy); }
+    .menu-lbl { flex:1; }
+    .menu-ext { color:var(--muted); font-size:0.82rem; }
     .brand { font-size:0.95rem; font-weight:700; letter-spacing:0.06em; color:var(--navy); }
     .role-pill { font-size:0.64rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
                  padding:4px 9px; border-radius:999px; }
@@ -96,7 +115,7 @@
     .ring-pct { font-family:"DM Mono",monospace; font-size:0.95rem; font-weight:500; fill:var(--ink); }
     .ring-label { font-size:0.72rem; color:var(--muted); margin-top:4px; }
 
-    .wrap { padding:16px 16px 92px; max-width:1100px; margin:0 auto; }
+    .wrap { padding:16px 16px 32px; max-width:1100px; margin:0 auto; }
     .build-tag { text-align:center; color:var(--muted); font-size:0.66rem; margin:20px 0 4px; opacity:0.7; }
     .err-toast { position:fixed; top:calc(8px + env(safe-area-inset-top)); left:12px; right:12px; z-index:90;
                  background:#b3322a; color:#fff; font-size:0.8rem; line-height:1.4; padding:11px 14px;
@@ -360,11 +379,16 @@
 
 <body>
   <header class="topbar">
-    <span class="brand">NCRAM PIPELINE</span>
+    <div class="topbar-left">
+      <button class="menu-btn" id="menu-btn" data-action="toggle-menu" aria-label="Menu" hidden>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <span class="brand">NCRAM PIPELINE</span>
+    </div>
     <span id="role-pill"></span>
+    <div id="menu-root"></div>
   </header>
   <main class="wrap"><div id="app"></div></main>
-  <nav class="bottomnav" id="bottomnav"></nav>
 
   <!-- Supabase client library — loads before our app code so `supabase` exists. -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -384,7 +408,7 @@
     const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
 
     // Bump this on each deploy so you can confirm at a glance which build is live.
-    const APP_BUILD = "2026-06-20b";
+    const APP_BUILD = "2026-06-21a";
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     // Color key per segment, aligned to the standard circle-emoji colors so the
@@ -691,7 +715,7 @@
 
     /* =========================================================== STATE */
     const DEFAULT_FILTERS = { search:"", stage:"", segment:"", region:"", owner:"", status:"active", stale:false, sort:"name" };
-    const state = { view:"home", selectedId:null, editingId:null, filters:{ ...DEFAULT_FILTERS },
+    const state = { view:"home", menuOpen:false, selectedId:null, editingId:null, filters:{ ...DEFAULT_FILTERS },
                     cpId:null, cpEditId:null, cpSearch:"", cpStale:false, cpSort:"name",
                     cpSegment:"", cpRegion:"", cpOwner:"", dashRegion:"", dashReps:[], dashSegment:"",
                     callLogCpId:null, acctLogId:null,
@@ -1774,6 +1798,8 @@
 
     /* ========================================================== RENDER */
     function renderHeader() {
+      const mb = document.getElementById("menu-btn");
+      if (mb) mb.hidden = false;
       const el = document.getElementById("role-pill");
       el.outerHTML = isManager()
         ? '<span id="role-pill" class="role-pill mgr">Manager</span>'
@@ -1794,7 +1820,7 @@
       }
       window.open(PERF_DASHBOARD_URL, "_blank", "noopener");
     }
-    function renderBottomNav() {
+    function renderMenu() {
       const items = [
         { id:"home",       label:"Home",        icon:ICONS.home },
         { id:"pipeline",   label:"Pipeline",    icon:ICONS.pipeline },
@@ -1803,15 +1829,23 @@
       ];
       if (isManager()) items.push({ id:"team", label:"Team", icon:ICONS.team });
       items.push({ id:"dashboard", label:"Dashboard", icon:ICONS.dashboard });
+      const root = document.getElementById("menu-root");
+      if (!root) return;
+      if (!state.menuOpen) { root.innerHTML = ""; return; }
       const active = currentSection();
-      document.getElementById("bottomnav").innerHTML = items.map(it =>
-        '<button class="navitem'+(active===it.id?' active':'')+'" data-action="nav-'+it.id+'">'
-        + '<span class="navicon">'+it.icon+'</span><span class="navlabel">'+it.label+'</span></button>').join("");
+      root.innerHTML = '<div class="menu-backdrop" data-action="close-menu"></div>'
+        + '<div class="menu-panel">'
+        + items.map(it =>
+            '<button class="menu-item'+(active===it.id?' on':'')+'" data-action="nav-'+it.id+'">'
+            + '<span class="menu-ic">'+it.icon+'</span><span class="menu-lbl">'+it.label+'</span>'
+            + (it.id==="dashboard" ? '<span class="menu-ext">↗</span>' : '')
+            + '</button>').join("")
+        + '</div>';
     }
     function render() {
       if (state.view === "team" && !isManager()) state.view = "list";
       renderHeader();
-      renderBottomNav();
+      renderMenu();
       const app = document.getElementById("app");
       if (state.view === "home")            app.innerHTML = landingView();
       else if (state.view === "list")       { app.innerHTML = listView(); renderResults(); }
@@ -1881,7 +1915,9 @@
     // The login screen — shown whenever no one is logged in.
     function renderLogin(message) {
       document.getElementById("role-pill").outerHTML = '<span id="role-pill"></span>';
-      document.getElementById("bottomnav").innerHTML = "";
+      state.menuOpen = false;
+      const mb = document.getElementById("menu-btn"); if (mb) mb.hidden = true;
+      const mr = document.getElementById("menu-root"); if (mr) mr.innerHTML = "";
       document.getElementById("app").innerHTML = ''
         + '<div class="login-wrap"><div class="login-card">'
         +   '<div class="login-title">Sign in</div>'
@@ -1914,6 +1950,9 @@
       const el = e.target.closest("[data-action]");
       if (!el) return;
       const action = el.dataset.action;
+      if (action === "toggle-menu")       { state.menuOpen = !state.menuOpen; renderMenu(); return; }
+      if (action === "close-menu")        { state.menuOpen = false; renderMenu(); return; }
+      if (action.indexOf("nav-") === 0)   { state.menuOpen = false; renderMenu(); }
       if (action === "login")             { doLogin();  return; }
       else if (action === "logout")       { doLogout(); return; }
       else if (action === "dash-clear-reps") { state.dashReps = []; render(); return; }
