@@ -175,6 +175,8 @@
            padding:10px 16px; border:1px solid transparent; cursor:pointer; }
     .btn-primary { background:var(--navy); color:#fff; }
     .btn-ghost { background:#fff; color:var(--navy); border-color:var(--line); }
+    .btn-quick { background:var(--navy); color:#fff; border-color:var(--gold); border-width:2px; font-weight:700; }
+    .btn-quick:active { background:#0a1f3a; }
     .btn-danger { background:#fff; color:#b3322a; border-color:#e6c4c4; }
 
     .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
@@ -408,7 +410,7 @@
     const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
 
     // Bump this on each deploy so you can confirm at a glance which build is live.
-    const APP_BUILD = "2026-06-21a";
+    const APP_BUILD = "2026-06-21c";
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     // Color key per segment, aligned to the standard circle-emoji colors so the
@@ -850,8 +852,8 @@
         + '</div>'
         + '<div class="section-label">Quick actions</div>'
         + '<div class="quick">'
-        +   '<button class="btn btn-ghost" data-action="add">+ New Pipeline Account</button>'
-        +   '<button class="btn btn-ghost" data-action="cp-add">+ New Call Point</button>'
+        +   '<button class="btn btn-quick" data-action="add">+ New Pipeline Account</button>'
+        +   '<button class="btn btn-quick" data-action="cp-add">+ New Call Point</button>'
         + '</div>'
         + (isManager() ? managerDashboard() : repDashboard())
         + '<p class="build-tag">Build '+APP_BUILD+'</p>';
