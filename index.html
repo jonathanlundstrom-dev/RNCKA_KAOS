@@ -416,7 +416,7 @@
     const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
 
     // Bump this on each deploy so you can confirm at a glance which build is live.
-    const APP_BUILD = "2026-06-21d";
+    const APP_BUILD = "2026-06-21e";
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     // Color key per segment, aligned to the standard circle-emoji colors so the
@@ -850,16 +850,16 @@
         +   '<div class="profile-role">'+roleLabel+'</div>'
         +   '<div class="demo-switch"><button class="btn btn-ghost btn-logout" data-action="logout">Sign out</button></div>'
         + '</div>'
+        + '<div class="section-label">Quick actions</div>'
+        + '<div class="quick">'
+        +   '<button class="qtile" data-action="add"><span class="qtile-ic">'+ICONS.pipeline+'</span><span class="qtile-lbl">NEW PIPELINE ACCOUNT</span></button>'
+        +   '<button class="qtile" data-action="cp-add"><span class="qtile-ic">'+ICONS.calls+'</span><span class="qtile-lbl">NEW CALL POINT</span></button>'
+        + '</div>'
         + '<div class="section-label">Snapshot</div>'
         + '<div class="tiles">'
         +   '<div class="tile"><div class="tile-num">'+active+'</div><div class="tile-lbl">Active</div></div>'
         +   '<div class="tile"><div class="tile-num">'+wins+'</div><div class="tile-lbl">Wins</div></div>'
         +   '<div class="tile"><div class="tile-num'+(callsDue?' alert':'')+'">'+callsDue+'</div><div class="tile-lbl">Calls Due</div></div>'
-        + '</div>'
-        + '<div class="section-label">Quick actions</div>'
-        + '<div class="quick">'
-        +   '<button class="qtile" data-action="add"><span class="qtile-ic">'+ICONS.pipeline+'</span><span class="qtile-lbl">NEW PIPELINE ACCOUNT</span></button>'
-        +   '<button class="qtile" data-action="cp-add"><span class="qtile-ic">'+ICONS.calls+'</span><span class="qtile-lbl">NEW CALL POINT</span></button>'
         + '</div>'
         + (isManager() ? managerDashboard() : repDashboard())
         + '<p class="build-tag">Build '+APP_BUILD+'</p>';
