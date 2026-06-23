@@ -140,6 +140,17 @@
     .reach-hint { margin:14px 0 4px; border:1px dashed var(--line); border-radius:12px; padding:12px 14px;
                   font-size:0.78rem; color:var(--muted); line-height:1.4; }
 
+    /* RFP Due Date flag (Collegiate) */
+    .rfp-flag { display:inline-flex; align-items:center; gap:3px; font-size:0.68rem; font-weight:700;
+                letter-spacing:0.02em; padding:3px 9px; border-radius:999px; white-space:nowrap;
+                background:#fff4d6; color:#7a5b00; border:1px solid #e6c34b; }
+    .rfp-flag.soon    { background:#ffe7cc; color:#8a4b12; border-color:#f0a861; }
+    .rfp-flag.overdue { background:#fbe0de; color:#a32820; border-color:#e3938c; }
+    .rfp-banner { margin:12px 0; border-radius:12px; padding:11px 14px; font-size:0.85rem; font-weight:700;
+                  background:#fff4d6; color:#7a5b00; border:1px solid #e6c34b; }
+    .rfp-banner.soon    { background:#ffe7cc; color:#8a4b12; border-color:#f0a861; }
+    .rfp-banner.overdue { background:#fbe0de; color:#a32820; border-color:#e3938c; }
+
     /* Contact blocks in forms */
     .contact-row { border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:10px; background:#fafbfc; }
     .contact-row-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
@@ -435,7 +446,7 @@
     const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
 
     // Bump this on each deploy so you can confirm at a glance which build is live.
-    const APP_BUILD = "2026-06-22a";
+    const APP_BUILD = "2026-06-22b";
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     // Color key per segment, aligned to the standard circle-emoji colors so the
@@ -535,6 +546,25 @@
       return a.status === "active" && a.stage < 5 && daysSince(a.lastTouch) >= STALE_DAYS;
     }
 
+    // RFP Due Date flag (Collegiate). Set from a call log; shown everywhere after.
+    function rfpFlag(dateStr) {
+      if (!dateStr) return "";
+      const days = -daysSince(dateStr);
+      let cls = "rfp-flag";
+      if (days < 0) cls += " overdue"; else if (days <= 14) cls += " soon";
+      const short = new Date(dateStr+"T00:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
+      return '<span class="'+cls+'">\u2691 RFP '+short+'</span>';
+    }
+    function rfpBanner(dateStr) {
+      if (!dateStr) return "";
+      const days = -daysSince(dateStr);
+      let cls = "rfp-banner", tail;
+      if (days < 0) { cls += " overdue"; const n=Math.abs(days); tail = n+" day"+(n===1?"":"s")+" overdue"; }
+      else if (days === 0) tail = "due today";
+      else { if (days <= 14) cls += " soon"; tail = "in "+days+" day"+(days===1?"":"s"); }
+      return '<div class="'+cls+'">\u2691 RFP Due — '+fmtDate(dateStr)+' · '+tail+'</div>';
+    }
+
     /* ============================================ CURRENT USER + ACCESS */
     // Null until a successful login fills it in (see the AUTH section below).
     let currentUser = null;
@@ -573,6 +603,7 @@
       primaryContact:"primary_contact", phone:"phone", email:"email", contacts:"contacts",
       nextStep:"next_step", nextStepDate:"next_step_date", wonDate:"won_date",
       lostReason:"lost_reason", lostDate:"lost_date", lastTouch:"last_touch", ownerId:"owner_id",
+      rfpDueDate:"rfp_due_date",
       photos:"photos",
     };
     // App object → database row. Only maps keys that are actually present, so the
@@ -609,6 +640,7 @@
         nextStep:r.next_step||"", nextStepDate:r.next_step_date||"",
         wonDate:r.won_date||"", lostReason:r.lost_reason||"", lostDate:r.lost_date||"",
         lastTouch:r.last_touch || todayStr(), ownerId:r.owner_id,
+        rfpDueDate:r.rfp_due_date||"",
         createdAt:r.created_at, updatedAt:r.updated_at,
         photos: r.photos || [], activity: activityRowsToItems(r.account_activity),
       };
@@ -683,7 +715,7 @@
       address:"address", city:"city", state:"state", zip:"zip",
       primaryContact:"primary_contact", phone:"phone", email:"email", contacts:"contacts",
       lastCall:"last_call", ownerId:"owner_id",
-      reachBaseline:"reach_baseline",
+      reachBaseline:"reach_baseline", rfpDueDate:"rfp_due_date",
       photos:"photos",
     };
     function callPointToRow(obj) {
@@ -712,6 +744,7 @@
         primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"", contacts:contactsFromRow(r),
         lastCall:r.last_call||"", ownerId:r.owner_id,
         reachBaseline:(r.reach_baseline == null ? null : Number(r.reach_baseline)),
+        rfpDueDate:r.rfp_due_date||"",
         createdAt:r.created_at, updatedAt:r.updated_at,
         photos: r.photos || [], calls: callLogRowsToItems(r.call_logs),
       };
@@ -770,10 +803,10 @@
 
     // A fresh, empty call-log draft.
     function emptyCallLog() {
-      return { date:todayStr(), type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"", reachBaseline:"", reachAdded:"" };
+      return { date:todayStr(), type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"", reachBaseline:"", reachAdded:"", rfpDue:"" };
     }
     function emptyAcctLog() {
-      return { date:todayStr(), type:"", note:"", action:"", followUp:"" };
+      return { date:todayStr(), type:"", note:"", action:"", followUp:"", rfpDue:"" };
     }
 
     /* =========================================================== VIEWS */
@@ -996,7 +1029,7 @@
         + '<article class="card'+(lost?' lost':'')+'" data-action="open" data-id="'+a.id+'">'
         +   '<div class="card-top"><h2 class="card-name">'+esc(a.accountName)+'</h2>'
         +     '<span class="owner">'+repName(a.ownerId)+'<br>'+repRegion(a.ownerId)+'</span></div>'
-        +   '<div class="chips">'+staleChip+lostChip+segmentPill(a.segment)+subCat+fmc+'</div>'
+        +   '<div class="chips">'+rfpFlag(a.rfpDueDate)+staleChip+lostChip+segmentPill(a.segment)+subCat+fmc+'</div>'
         +   '<div class="stage"><div class="stage-label"><span class="dot" style="background:'+color+'"></span>'
         +     'Stage '+a.stage+' · '+STAGES[a.stage]+'</div><div class="stage-bar">'+segs+'</div></div>'
         +   nextLine + photoStrip
@@ -1024,7 +1057,7 @@
         + '<div class="lrow'+(lost?' lost':'')+'" data-action="open" data-id="'+a.id+'">'
         +   '<span class="lrow-dot" style="background:'+color+'"></span>'
         +   '<div class="lrow-main"><div class="lrow-name">'+esc(a.accountName)+staleDot+'</div>'
-        +     '<div class="lrow-sub">'+segmentPill(a.segment)+'<span class="lrow-meta">'+esc(meta)+'</span></div></div>'
+        +     '<div class="lrow-sub">'+segmentPill(a.segment)+rfpFlag(a.rfpDueDate)+'<span class="lrow-meta">'+esc(meta)+'</span></div></div>'
         +   '<div class="lrow-side">'+side+'</div>'
         + '</div>';
     }
@@ -1211,7 +1244,7 @@
         + '<h2 class="detail-name">'+esc(a.accountName)+'</h2>'
         + '<div class="stage-label"><span class="dot" style="background:'+color+'"></span>'
         +   'Stage '+a.stage+' · '+STAGES[a.stage]+(lost?'  —  <span style="color:var(--red)">Lost</span>':'')+'</div>'
-        + staleNote
+        + staleNote + rfpBanner(a.rfpDueDate)
         + nextBlock
         + '<div class="detail-rows">'
         +   row("Segment", a.segment) + row("B&I sub-category", a.biSubCategory)
@@ -1388,7 +1421,7 @@
         + '<article class="card" data-action="cp-open" data-id="'+c.id+'">'
         +   '<div class="card-top"><h2 class="card-name">'+esc(c.name)+'</h2>'
         +     '<span class="owner">'+repName(c.ownerId)+'</span></div>'
-        +   '<div class="chips">'+staleChip+segmentPill(c.segment)+fmc+'</div>'
+        +   '<div class="chips">'+rfpFlag(c.rfpDueDate)+staleChip+segmentPill(c.segment)+fmc+'</div>'
         +   lastLine + photoStrip
         + '</article>';
     }
@@ -1403,7 +1436,7 @@
         + '<div class="lrow" data-action="cp-open" data-id="'+c.id+'">'
         +   '<span class="lrow-dot" style="background:'+segColor(c.segment)+'"></span>'
         +   '<div class="lrow-main"><div class="lrow-name">'+esc(c.name)+'</div>'
-        +     '<div class="lrow-sub">'+esc(sub)+'</div></div>'
+        +     '<div class="lrow-sub">'+esc(sub)+rfpFlag(c.rfpDueDate)+'</div></div>'
         +   '<div class="lrow-side">'+side+'</div>'
         + '</div>';
     }
@@ -1516,7 +1549,7 @@
       return ''
         + '<button class="back" data-action="cp-back">‹ Back to call points</button>'
         + '<h2 class="detail-name">'+esc(c.name)+'</h2>'
-        + staleNote
+        + staleNote + rfpBanner(c.rfpDueDate)
         + '<div class="detail-rows">'
         +   row("Segment", c.segment)
         +   row("FMC managed", c.fmcManaged ? "Yes" : "No") + row("FMC", esc(c.fmcName))
@@ -1701,6 +1734,11 @@
             + '<div class="field"><label>New touchpoints added this call</label>'
             +   '<input id="cl-reach-add" type="number" min="0" inputmode="numeric" value="'+esc(d.reachAdded)+'" placeholder="0" /></div>'
         );
+      const collegiate = c.segment === "Collegiate";
+      const rfpField = !collegiate ? "" :
+        '<div class="form-section">RFP</div>'
+        + '<p class="reach-help">Logging an RFP due date flags this call point everywhere until it passes. Update here if the date changes.</p>'
+        + '<div class="field"><label>RFP Due Date</label><input id="cl-rfp" type="date" value="'+esc(d.rfpDue)+'" /></div>';
       const actTypeOpts = ACTIVATION_TYPES.map(t =>
         '<option value="'+t+'"'+(t===d.actType?' selected':'')+'>'+t+'</option>').join("");
       const sortedOpts = (list, placeholder) => '<option value="">'+placeholder+'</option>'
@@ -1736,6 +1774,7 @@
         +   '<textarea id="cl-note" rows="3" placeholder="Notes from the call">'+esc(d.note)+'</textarea></div>'
 
         + reachSection
+        + rfpField
 
         + '<div class="form-section">Account Execution</div>'
 
@@ -1773,6 +1812,7 @@
       const cb = document.getElementById("cl-act-done"); if (cb) d.actDone = cb.checked;
       const rb = get("cl-reach-base"); if (rb !== undefined) d.reachBaseline = rb;
       const ra = get("cl-reach-add");  if (ra !== undefined) d.reachAdded = ra;
+      const rf = get("cl-rfp");        if (rf !== undefined) d.rfpDue = rf;
     }
     // Read the "add row" inputs, commit a row to the draft, then re-render.
     function addExecRow(kind) {
@@ -1810,9 +1850,10 @@
         }
       }
       const hasReach = (reachBaselineToSet != null) || (reachAdded > 0);
+      const newRfp = (!!c && c.segment === "Collegiate") ? (d.rfpDue || "").trim() : "";
 
       // Require at least something meaningful.
-      if (!note && !d.type && !d.cold.length && !d.skus.length && !d.actDone && !hasReach) {
+      if (!note && !d.type && !d.cold.length && !d.skus.length && !d.actDone && !hasReach && !newRfp) {
         document.getElementById("cl-msg").textContent = "Add a note or some execution detail before saving.";
         return;
       }
@@ -1832,12 +1873,14 @@
       const newLast = (c && c.lastCall && c.lastCall > when) ? c.lastCall : when;
       const cpUpdate = { last_call:newLast };
       if (reachBaselineToSet != null) cpUpdate.reach_baseline = reachBaselineToSet;
+      if (newRfp) cpUpdate.rfp_due_date = newRfp;
       await sb.from("call_points").update(cpUpdate).eq("id", id);
       if (c) {
         c.calls.push({ id:data.id, date:data.logged_at, note:data.note,
                        callType:data.call_type||"", execution:data.execution||{} });
         c.lastCall = newLast;
         if (reachBaselineToSet != null) c.reachBaseline = reachBaselineToSet;
+        if (newRfp) c.rfpDueDate = newRfp;
       }
       state.callLog = emptyCallLog();
       state.view = "cp-detail";
@@ -1849,6 +1892,11 @@
       const a = getAccount(state.acctLogId);
       if (!a) return '<p>Account not found.</p>';
       const d = state.acctLog;
+      const collegiate = a.segment === "Collegiate";
+      const rfpField = !collegiate ? "" :
+        '<div class="form-section">RFP</div>'
+        + '<p class="reach-help">Logging an RFP due date flags this account everywhere until it passes. Update here if the date changes.</p>'
+        + '<div class="field"><label>RFP Due Date</label><input id="al-rfp" type="date" value="'+esc(d.rfpDue)+'" /></div>';
       return ''
         + '<button class="back" data-action="alog-cancel">‹ Cancel</button>'
         + '<h2 class="detail-name">Log a call</h2>'
@@ -1863,6 +1911,7 @@
         +   '<textarea id="al-action" rows="2" placeholder="What you did or committed to">'+esc(d.action)+'</textarea></div>'
         + '<div class="field"><label>Follow-up needed</label>'
         +   '<textarea id="al-followup" rows="2" placeholder="What needs to happen next">'+esc(d.followUp)+'</textarea></div>'
+        + rfpField
         + '<div class="form-actions">'
         +   '<button class="btn btn-primary" data-action="alog-save">Save call</button>'
         +   '<button class="btn btn-ghost" data-action="alog-cancel">Cancel</button>'
@@ -1877,13 +1926,16 @@
       d.note     = get("al-note")     ?? d.note;
       d.action   = get("al-action")   ?? d.action;
       d.followUp = get("al-followup") ?? d.followUp;
+      d.rfpDue   = get("al-rfp")      ?? d.rfpDue;
       const note = (d.note || "").trim();
-      if (!note && !d.type && !(d.action || "").trim() && !(d.followUp || "").trim()) {
+      const id = state.acctLogId;
+      const a = getAccount(id);
+      const newRfp = (a && a.segment === "Collegiate") ? (d.rfpDue || "").trim() : "";
+      if (!note && !d.type && !(d.action || "").trim() && !(d.followUp || "").trim() && !newRfp) {
         document.getElementById("al-msg").textContent = "Add a note or some detail before saving.";
         return;
       }
       const when = d.date || todayStr();
-      const id = state.acctLogId;
       const { data, error } = await sb.from("account_activity")
         .insert({ account_id:id, note, call_type:d.type || null,
                   action_taken:(d.action || "").trim() || null, follow_up:(d.followUp || "").trim() || null,
@@ -1891,13 +1943,15 @@
         .select().single();
       if (error) { document.getElementById("al-msg").textContent = "Couldn't save: " + error.message; return; }
       // last_touch tracks the most recent touch, so a back-dated call won't pull it earlier.
-      const a = getAccount(id);
       const newTouch = (a && a.lastTouch && a.lastTouch > when) ? a.lastTouch : when;
-      await sb.from("accounts").update({ last_touch:newTouch }).eq("id", id);
+      const acctUpdate = { last_touch:newTouch };
+      if (newRfp) acctUpdate.rfp_due_date = newRfp;
+      await sb.from("accounts").update(acctUpdate).eq("id", id);
       if (a) {
         a.activity.push({ id:data.id, date:data.logged_at, text:data.note, callType:data.call_type||"",
                           action:data.action_taken||"", followUp:data.follow_up||"" });
         a.lastTouch = newTouch;
+        if (newRfp) a.rfpDueDate = newRfp;
       }
       state.acctLog = emptyAcctLog();
       state.view = "detail";
@@ -2094,7 +2148,7 @@
         if (target === "acct") { state.acctView = mode; saveViewPref("ram_acctView", mode); renderResults(); }
         else                   { state.cpView   = mode; saveViewPref("ram_cpView", mode);   renderCpResults(); }
       }
-      else if (action === "log-acct-call") { state.acctLogId = el.dataset.id; state.acctLog = emptyAcctLog(); state.view = "acct-log"; render(); }
+      else if (action === "log-acct-call") { state.acctLogId = el.dataset.id; state.acctLog = emptyAcctLog(); const _a = getAccount(el.dataset.id); if (_a) state.acctLog.rfpDue = _a.rfpDueDate || ""; state.view = "acct-log"; render(); }
       else if (action === "alog-save")     { saveAcctCall(); }
       else if (action === "alog-cancel")   { state.acctLog = emptyAcctLog(); state.view = "detail"; render(); }
       else if (action === "add-contact")   {
@@ -2128,7 +2182,7 @@
           });
         }
       }
-      else if (action === "log-call")        { state.callLogCpId = el.dataset.id; state.callLog = emptyCallLog(); state.view = "cp-log"; render(); }
+      else if (action === "log-call")        { state.callLogCpId = el.dataset.id; state.callLog = emptyCallLog(); const _c = getCallPoint(el.dataset.id); if (_c) state.callLog.rfpDue = _c.rfpDueDate || ""; state.view = "cp-log"; render(); }
       else if (action === "clog-add-cold")   { addExecRow("cold"); }
       else if (action === "clog-add-sku")    { addExecRow("sku"); }
       else if (action === "clog-del-cold")   { syncCallLogDraft(); state.callLog.cold.splice(Number(el.dataset.i), 1); render(); }
