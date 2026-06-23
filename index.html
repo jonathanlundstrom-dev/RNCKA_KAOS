@@ -121,6 +121,25 @@
                  background:#b3322a; color:#fff; font-size:0.8rem; line-height:1.4; padding:11px 14px;
                  border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,0.25); }
 
+    /* Vending Reach Touchpoints */
+    .reach-card { margin:14px 0 4px; border:1px solid var(--line); border-radius:14px; padding:14px 16px;
+                  background:linear-gradient(180deg, #0B2545 0%, #20466d 100%); color:#fff; }
+    .reach-card-title { font-size:0.7rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+                        color:var(--gold); margin-bottom:10px; }
+    .reach-card-row { display:flex; align-items:center; gap:8px; }
+    .reach-stat { flex:1; text-align:center; }
+    .reach-num { font-size:1.5rem; font-weight:800; line-height:1; }
+    .reach-num.reach-grow { color:#7Fd49a; }
+    .reach-lbl { font-size:0.62rem; font-weight:600; letter-spacing:0.04em; text-transform:uppercase;
+                 color:rgba(255,255,255,0.7); margin-top:5px; }
+    .reach-arrow { color:var(--gold); font-size:1.1rem; }
+    .reach-help { font-size:0.78rem; color:var(--muted); margin:2px 0 10px; line-height:1.4; }
+    .reach-current { font-size:0.85rem; color:var(--ink); margin-bottom:10px; }
+    .reach-current strong { color:var(--navy); }
+    .reach-grow { color:#2e8b57; font-weight:700; }
+    .reach-hint { margin:14px 0 4px; border:1px dashed var(--line); border-radius:12px; padding:12px 14px;
+                  font-size:0.78rem; color:var(--muted); line-height:1.4; }
+
     /* Contact blocks in forms */
     .contact-row { border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:10px; background:#fafbfc; }
     .contact-row-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
@@ -416,7 +435,7 @@
     const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
 
     // Bump this on each deploy so you can confirm at a glance which build is live.
-    const APP_BUILD = "2026-06-21f";
+    const APP_BUILD = "2026-06-22a";
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     // Color key per segment, aligned to the standard circle-emoji colors so the
@@ -664,6 +683,7 @@
       address:"address", city:"city", state:"state", zip:"zip",
       primaryContact:"primary_contact", phone:"phone", email:"email", contacts:"contacts",
       lastCall:"last_call", ownerId:"owner_id",
+      reachBaseline:"reach_baseline",
       photos:"photos",
     };
     function callPointToRow(obj) {
@@ -691,6 +711,7 @@
         address:r.address||"", city:r.city||"", state:r.state||"", zip:r.zip||"",
         primaryContact:r.primary_contact||"", phone:r.phone||"", email:r.email||"", contacts:contactsFromRow(r),
         lastCall:r.last_call||"", ownerId:r.owner_id,
+        reachBaseline:(r.reach_baseline == null ? null : Number(r.reach_baseline)),
         createdAt:r.created_at, updatedAt:r.updated_at,
         photos: r.photos || [], calls: callLogRowsToItems(r.call_logs),
       };
@@ -749,7 +770,7 @@
 
     // A fresh, empty call-log draft.
     function emptyCallLog() {
-      return { date:todayStr(), type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"" };
+      return { date:todayStr(), type:"", note:"", cold:[], skus:[], actDone:false, actType:"Sampling", actNote:"", reachBaseline:"", reachAdded:"" };
     }
     function emptyAcctLog() {
       return { date:todayStr(), type:"", note:"", action:"", followUp:"" };
@@ -1486,6 +1507,12 @@
         ? (isManager() ? "Manager access — you can edit this call point or reassign it." : "This call point is in your book.")
         : "Owned by "+repName(c.ownerId)+" ("+repRegion(c.ownerId)+"). View only.";
 
+      const reachBlock = c.segment === "Vending"
+        ? (c.reachBaseline != null
+            ? reachCard(c)
+            : '<div class="reach-hint">Vending reach tracking: log a call to set a baseline of touchpoints, then track new distribution from there.</div>')
+        : "";
+
       return ''
         + '<button class="back" data-action="cp-back">‹ Back to call points</button>'
         + '<h2 class="detail-name">'+esc(c.name)+'</h2>'
@@ -1499,6 +1526,7 @@
         +   contactsDetailHtml(c.contacts)
         +   row("Last call", c.lastCall ? fmtDate(c.lastCall) : "")
         + '</div>'
+        + reachBlock
         + editBtn
         + '<div class="form-section">Call log</div>' + logAdd + callList
         + '<div class="form-section">Photos ('+c.photos.length+')</div>' + thumbs + addPhoto
@@ -1600,6 +1628,33 @@
 
     // ---- Call log display helpers -------------------------------------------
     // Compact one-line summaries of what was executed on a call.
+    // ---- Vending Reach Touchpoints ------------------------------------------
+    // Baseline lives on the call point; each call log adds increments
+    // (execution.reachAdded). Current reach = baseline + sum of increments.
+    function reachTotals(c) {
+      const hasBase = c && c.reachBaseline != null;
+      const base = hasBase ? Number(c.reachBaseline) : 0;
+      let added = 0;
+      (c && c.calls || []).forEach(n => {
+        const a = n.execution && Number(n.execution.reachAdded);
+        if (a) added += a;
+      });
+      return { hasBase, base, added, current: base + added };
+    }
+    function reachCard(c) {
+      const t = reachTotals(c);
+      if (!t.hasBase) return "";
+      const pct = t.base > 0 ? Math.round((t.added / t.base) * 100) : 0;
+      return '<div class="reach-card">'
+        + '<div class="reach-card-title">Reach Touchpoints</div>'
+        + '<div class="reach-card-row">'
+        +   '<div class="reach-stat"><div class="reach-num">'+t.base+'</div><div class="reach-lbl">Baseline</div></div>'
+        +   '<div class="reach-arrow">→</div>'
+        +   '<div class="reach-stat"><div class="reach-num">'+t.current+'</div><div class="reach-lbl">Current</div></div>'
+        +   '<div class="reach-stat"><div class="reach-num reach-grow">+'+t.added+'</div><div class="reach-lbl">Growth'+(pct?' · '+pct+'%':'')+'</div></div>'
+        + '</div></div>';
+    }
+
     function callExecSummary(ex) {
       if (!ex) return "";
       const parts = [];
@@ -1612,6 +1667,10 @@
       const act = ex.activation;
       if (act && (act.type || act.notes)) parts.push('<div class="exec-line"><span class="exec-tag">'
         + esc(act.type || 'Activation') + '</span> ' + esc(act.notes || '') + '</div>');
+      if (ex.reachBaseline != null) parts.push('<div class="exec-line"><span class="exec-tag">Reach baseline</span> '
+        + Number(ex.reachBaseline) + ' touchpoints</div>');
+      if (ex.reachAdded) parts.push('<div class="exec-line"><span class="exec-tag">New reach</span> +'
+        + Number(ex.reachAdded) + ' touchpoints</div>');
       return parts.join("");
     }
     function callLogItem(n) {
@@ -1629,6 +1688,19 @@
       const c = getCallPoint(state.callLogCpId);
       if (!c) return '<p>Call point not found.</p>';
       const d = state.callLog;
+      const vending = c.segment === "Vending";
+      const rt = reachTotals(c);
+      const reachSection = !vending ? "" :
+        ( !rt.hasBase
+          ? '<div class="form-section">Reach Touchpoints</div>'
+            + '<p class="reach-help">Set the starting number of touchpoints (machines / points of distribution) for this account. This baseline is what future growth is measured from.</p>'
+            + '<div class="field"><label>Baseline touchpoints</label>'
+            +   '<input id="cl-reach-base" type="number" min="0" inputmode="numeric" value="'+esc(d.reachBaseline)+'" placeholder="e.g. 12" /></div>'
+          : '<div class="form-section">Reach Touchpoints</div>'
+            + '<div class="reach-current">Baseline '+rt.base+' · Current <strong>'+rt.current+'</strong>'+(rt.added?' <span class="reach-grow">(+'+rt.added+')</span>':'')+'</div>'
+            + '<div class="field"><label>New touchpoints added this call</label>'
+            +   '<input id="cl-reach-add" type="number" min="0" inputmode="numeric" value="'+esc(d.reachAdded)+'" placeholder="0" /></div>'
+        );
       const actTypeOpts = ACTIVATION_TYPES.map(t =>
         '<option value="'+t+'"'+(t===d.actType?' selected':'')+'>'+t+'</option>').join("");
       const sortedOpts = (list, placeholder) => '<option value="">'+placeholder+'</option>'
@@ -1662,6 +1734,8 @@
         + '<div class="field"><label>Call type</label>'+callTypeSelect("cl-type", d.type)+'</div>'
         + '<div class="field"><label>What happened on the call?</label>'
         +   '<textarea id="cl-note" rows="3" placeholder="Notes from the call">'+esc(d.note)+'</textarea></div>'
+
+        + reachSection
 
         + '<div class="form-section">Account Execution</div>'
 
@@ -1697,6 +1771,8 @@
       const at = get("cl-act-type"); if (at !== undefined) d.actType = at;
       const an = get("cl-act-note"); if (an !== undefined) d.actNote = an;
       const cb = document.getElementById("cl-act-done"); if (cb) d.actDone = cb.checked;
+      const rb = get("cl-reach-base"); if (rb !== undefined) d.reachBaseline = rb;
+      const ra = get("cl-reach-add");  if (ra !== undefined) d.reachAdded = ra;
     }
     // Read the "add row" inputs, commit a row to the draft, then re-render.
     function addExecRow(kind) {
@@ -1717,8 +1793,26 @@
       syncCallLogDraft();
       const d = state.callLog;
       const note = (d.note || "").trim();
+      const id = state.callLogCpId;
+      const c = getCallPoint(id);
+
+      // Vending reach: set a baseline the first time, otherwise record an increment.
+      const isVending = !!c && c.segment === "Vending";
+      const totals = c ? reachTotals(c) : { hasBase:false };
+      let reachBaselineToSet = null, reachAdded = 0;
+      if (isVending) {
+        if (!totals.hasBase) {
+          const b = parseInt(d.reachBaseline, 10);
+          if (!isNaN(b) && b >= 0) reachBaselineToSet = b;
+        } else {
+          const a = parseInt(d.reachAdded, 10);
+          if (!isNaN(a) && a > 0) reachAdded = a;
+        }
+      }
+      const hasReach = (reachBaselineToSet != null) || (reachAdded > 0);
+
       // Require at least something meaningful.
-      if (!note && !d.type && !d.cold.length && !d.skus.length && !d.actDone) {
+      if (!note && !d.type && !d.cold.length && !d.skus.length && !d.actDone && !hasReach) {
         document.getElementById("cl-msg").textContent = "Add a note or some execution detail before saving.";
         return;
       }
@@ -1727,20 +1821,23 @@
         newSkus: d.skus,
         activation: d.actDone ? { type:d.actType, notes:(d.actNote || "").trim() } : null,
       };
+      if (reachAdded > 0) execution.reachAdded = reachAdded;
+      if (reachBaselineToSet != null) execution.reachBaseline = reachBaselineToSet;
       const when = d.date || todayStr();
-      const id = state.callLogCpId;
       const { data, error } = await sb.from("call_logs")
         .insert({ call_point_id:id, note, call_type:d.type || null, execution, logged_at:when, author_id:currentUser.id })
         .select().single();
       if (error) { document.getElementById("cl-msg").textContent = "Couldn't save: " + error.message; return; }
       // last_call tracks the most recent call, so a back-dated entry won't pull it earlier.
-      const c = getCallPoint(id);
       const newLast = (c && c.lastCall && c.lastCall > when) ? c.lastCall : when;
-      await sb.from("call_points").update({ last_call:newLast }).eq("id", id);
+      const cpUpdate = { last_call:newLast };
+      if (reachBaselineToSet != null) cpUpdate.reach_baseline = reachBaselineToSet;
+      await sb.from("call_points").update(cpUpdate).eq("id", id);
       if (c) {
         c.calls.push({ id:data.id, date:data.logged_at, note:data.note,
                        callType:data.call_type||"", execution:data.execution||{} });
         c.lastCall = newLast;
+        if (reachBaselineToSet != null) c.reachBaseline = reachBaselineToSet;
       }
       state.callLog = emptyCallLog();
       state.view = "cp-detail";
