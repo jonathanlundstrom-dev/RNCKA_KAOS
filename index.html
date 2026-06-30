@@ -140,6 +140,18 @@
     .reach-hint { margin:14px 0 4px; border:1px dashed var(--line); border-radius:12px; padding:12px 14px;
                   font-size:0.78rem; color:var(--muted); line-height:1.4; }
 
+    /* Document attachments */
+    .file-list { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+    .file-row { display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:10px;
+                padding:10px 12px; background:#fff; }
+    .file-link { flex:1; display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--ink); min-width:0; }
+    .file-ic { font-size:1.2rem; flex:none; line-height:1; }
+    .file-meta { display:flex; flex-direction:column; min-width:0; }
+    .file-name { font-size:0.9rem; font-weight:600; color:var(--navy); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .file-sub { font-size:0.72rem; color:var(--muted); margin-top:2px; }
+    .file-del { flex:none; background:#fff; border:1px solid var(--line); color:#b3322a; width:26px; height:26px;
+                border-radius:7px; cursor:pointer; font-size:0.95rem; line-height:1; }
+
     /* RFP Due Date flag (Collegiate) */
     .rfp-flag { display:inline-flex; align-items:center; gap:3px; font-size:0.68rem; font-weight:700;
                 letter-spacing:0.02em; padding:3px 9px; border-radius:999px; white-space:nowrap;
@@ -446,7 +458,7 @@
     const PERF_DASHBOARD_URL = "https://jonathanlundstrom-dev.github.io/RNCKA-Dashboard_Insights/";
 
     // Bump this on each deploy so you can confirm at a glance which build is live.
-    const APP_BUILD = "2026-06-22b";
+    const APP_BUILD = "2026-06-22c";
 
     const SEGMENTS = ["B&I", "Healthcare", "Vending", "Collegiate", "Fitness", "Travel"];
     // Color key per segment, aligned to the standard circle-emoji colors so the
@@ -604,7 +616,7 @@
       nextStep:"next_step", nextStepDate:"next_step_date", wonDate:"won_date",
       lostReason:"lost_reason", lostDate:"lost_date", lastTouch:"last_touch", ownerId:"owner_id",
       rfpDueDate:"rfp_due_date",
-      photos:"photos",
+      photos:"photos", files:"files",
     };
     // App object → database row. Only maps keys that are actually present, so the
     // same function serves a full insert and a partial update. Empty strings
@@ -642,7 +654,7 @@
         lastTouch:r.last_touch || todayStr(), ownerId:r.owner_id,
         rfpDueDate:r.rfp_due_date||"",
         createdAt:r.created_at, updatedAt:r.updated_at,
-        photos: r.photos || [], activity: activityRowsToItems(r.account_activity),
+        photos: r.photos || [], files: r.files || [], activity: activityRowsToItems(r.account_activity),
       };
     }
 
@@ -716,7 +728,7 @@
       primaryContact:"primary_contact", phone:"phone", email:"email", contacts:"contacts",
       lastCall:"last_call", ownerId:"owner_id",
       reachBaseline:"reach_baseline", rfpDueDate:"rfp_due_date",
-      photos:"photos",
+      photos:"photos", files:"files",
     };
     function callPointToRow(obj) {
       const row = {};
@@ -746,7 +758,7 @@
         reachBaseline:(r.reach_baseline == null ? null : Number(r.reach_baseline)),
         rfpDueDate:r.rfp_due_date||"",
         createdAt:r.created_at, updatedAt:r.updated_at,
-        photos: r.photos || [], calls: callLogRowsToItems(r.call_logs),
+        photos: r.photos || [], files: r.files || [], calls: callLogRowsToItems(r.call_logs),
       };
     }
 
@@ -1232,6 +1244,11 @@
         ? '<input type="file" id="photo-input" accept="image/*" multiple style="display:none" />'
           + '<div class="form-actions"><button class="btn btn-ghost" data-action="add-photo">+ Add photo</button></div>'
         : "";
+      const fileList = filesListHtml(a.files, editable, "del-file", a.id);
+      const addFile = editable
+        ? '<input type="file" id="file-input" accept="'+FILE_ACCEPT+'" multiple style="display:none" />'
+          + '<div class="form-actions"><button class="btn btn-ghost" data-action="add-file">+ Add file</button></div>'
+        : "";
 
       const editBtn = editable
         ? '<div class="form-actions"><button class="btn btn-primary" data-action="edit">Edit account</button></div>' : "";
@@ -1260,6 +1277,7 @@
         + '</div>'
         + editBtn
         + '<div class="form-section">Activity</div>' + noteAdd + activityList
+        + '<div class="form-section">Documents ('+a.files.length+')</div>' + fileList + addFile
         + '<div class="form-section">Photos ('+a.photos.length+')</div>' + thumbs + addPhoto
         + '<p class="ownership-note">'+note+'</p>';
     }
@@ -1533,6 +1551,11 @@
         ? '<input type="file" id="cp-photo-input" accept="image/*" multiple style="display:none" />'
           + '<div class="form-actions"><button class="btn btn-ghost" data-action="cp-add-photo">+ Add photo</button></div>'
         : "";
+      const cpFileList = filesListHtml(c.files, editable, "cp-del-file", c.id);
+      const cpAddFile = editable
+        ? '<input type="file" id="cp-file-input" accept="'+FILE_ACCEPT+'" multiple style="display:none" />'
+          + '<div class="form-actions"><button class="btn btn-ghost" data-action="cp-add-file">+ Add file</button></div>'
+        : "";
 
       const editBtn = editable
         ? '<div class="form-actions"><button class="btn btn-primary" data-action="cp-edit">Edit call point</button></div>' : "";
@@ -1562,6 +1585,7 @@
         + reachBlock
         + editBtn
         + '<div class="form-section">Call log</div>' + logAdd + callList
+        + '<div class="form-section">Documents ('+c.files.length+')</div>' + cpFileList + cpAddFile
         + '<div class="form-section">Photos ('+c.photos.length+')</div>' + thumbs + addPhoto
         + '<p class="ownership-note">'+note+'</p>';
     }
@@ -2167,6 +2191,17 @@
           render();
         });
       }
+      else if (action === "add-file")     { document.getElementById("file-input").click(); }
+      else if (action === "del-file")     {
+        const acct = getAccount(el.dataset.id);
+        if (!acct) return;
+        const f = acct.files.find(x => x.id === el.dataset.file);
+        const remaining = acct.files.filter(x => x.id !== el.dataset.file);
+        updateAccount(acct.id, { files:remaining }).then(() => {
+          if (f && f.path) sb.storage.from("photos").remove([f.path]);
+          render();
+        });
+      }
       else if (action === "tab-callpoints") { state.view = "callpoints"; state.cpId = null; render(); }
       else if (action === "cp-add")         { state.cpEditId = null; state.view = "cp-form"; render(); }
       else if (action === "cp-open")        { state.cpId = el.dataset.id; state.view = "cp-detail"; render(); }
@@ -2198,6 +2233,17 @@
         const remaining = cp.photos.filter(p => p.id !== el.dataset.photo);
         updateCallPoint(cp.id, { photos:remaining }).then(() => {
           if (photo && photo.path) sb.storage.from("photos").remove([photo.path]);
+          render();
+        });
+      }
+      else if (action === "cp-add-file")     { document.getElementById("cp-file-input").click(); }
+      else if (action === "cp-del-file")     {
+        const cp = getCallPoint(el.dataset.id);
+        if (!cp) return;
+        const f = cp.files.find(x => x.id === el.dataset.file);
+        const remaining = cp.files.filter(x => x.id !== el.dataset.file);
+        updateCallPoint(cp.id, { files:remaining }).then(() => {
+          if (f && f.path) sb.storage.from("photos").remove([f.path]);
           render();
         });
       }
@@ -2266,6 +2312,61 @@
       render();
     }
 
+    // Documents (RFPs, contracts, emails, etc.). Stored in the same "photos"
+    // bucket; the file's link is saved on the record's `files` column.
+    const FILE_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.eml,.msg,.rtf,.pages,.numbers,.key,application/pdf,image/*";
+    function fileSizeStr(b) {
+      b = Number(b) || 0;
+      if (b >= 1048576) return (b/1048576).toFixed(1) + " MB";
+      if (b >= 1024) return Math.round(b/1024) + " KB";
+      return b + " B";
+    }
+    function fileGlyph(f) {
+      const ext = ((f.name||"").split(".").pop() || "").toLowerCase();
+      const t = f.type || "";
+      if (ext === "pdf" || t === "application/pdf") return "\uD83D\uDCD5";
+      if (["doc","docx","rtf","pages"].includes(ext)) return "\uD83D\uDCDD";
+      if (["xls","xlsx","csv","numbers"].includes(ext)) return "\uD83D\uDCCA";
+      if (["ppt","pptx","key"].includes(ext)) return "\uD83D\uDCC8";
+      if (["eml","msg"].includes(ext)) return "\u2709\uFE0F";
+      if (t.indexOf("image/") === 0 || ["png","jpg","jpeg","gif","webp","heic"].includes(ext)) return "\uD83D\uDDBC\uFE0F";
+      return "\uD83D\uDCC4";
+    }
+    function filesListHtml(files, editable, delAction, recId) {
+      if (!files || !files.length)
+        return '<p style="color:var(--muted);font-size:0.85rem;margin-top:8px">No files yet.</p>';
+      return '<div class="file-list">' + files.map(f =>
+        '<div class="file-row">'
+        + '<a class="file-link" href="'+esc(f.url)+'" target="_blank" rel="noopener">'
+        +   '<span class="file-ic">'+fileGlyph(f)+'</span>'
+        +   '<span class="file-meta"><span class="file-name">'+esc(f.name)+'</span>'
+        +     '<span class="file-sub">'+fileSizeStr(f.size)+(f.uploadedAt?' \u00b7 '+fmtDate(f.uploadedAt):'')+'</span></span>'
+        + '</a>'
+        + (editable ? '<button class="file-del" data-action="'+delAction+'" data-id="'+recId+'" data-file="'+f.id+'">\u00d7</button>' : '')
+        + '</div>').join("") + '</div>';
+    }
+    async function uploadFile(folder, recordId, file) {
+      const fileId = "f_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
+      const ext = ((file.name||"").split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,10);
+      const path = folder + "/" + recordId + "/" + fileId + (ext ? "."+ext : "");
+      const { error } = await sb.storage.from("photos").upload(path, file, { contentType: file.type || "application/octet-stream" });
+      if (error) { alert("Couldn't upload " + file.name + ": " + error.message); return null; }
+      const url = sb.storage.from("photos").getPublicUrl(path).data.publicUrl;
+      return { id:fileId, name:file.name, path, url, type:file.type||"", size:file.size||0, uploadedAt:todayStr() };
+    }
+    async function attachFiles(fileList, current, folder, recordId, save) {
+      const MAX = 25 * 1048576;
+      const added = [];
+      for (const file of fileList) {
+        if (file.size > MAX) { alert(file.name + " is larger than 25 MB and was skipped."); continue; }
+        const rec = await uploadFile(folder, recordId, file);
+        if (rec) added.push(rec);
+      }
+      if (!added.length) return;
+      await save([...current, ...added]);
+      render();
+    }
+
     app.addEventListener("change", (e) => {
       const id = e.target.id;
       if (id === "avatar-input") {
@@ -2324,6 +2425,12 @@
         const files = Array.from(e.target.files || []);
         if (files.length) attachPhotos(files, acct.photos, "accounts", acct.id, arr => updateAccount(acct.id, { photos:arr }));
       }
+      if (id === "file-input") {
+        const acct = getAccount(state.selectedId);
+        if (!acct) return;
+        const docs = Array.from(e.target.files || []);
+        if (docs.length) attachFiles(docs, acct.files, "account-files", acct.id, arr => updateAccount(acct.id, { files:arr }));
+      }
       if (id === "cp-fmc")    { const hide = e.target.value !== "yes";
                                 document.getElementById("cp-field-fmcname").classList.toggle("hidden", hide);
                                 document.getElementById("cp-field-sectorlob").classList.toggle("hidden", hide);
@@ -2336,6 +2443,12 @@
         if (!cp) return;
         const files = Array.from(e.target.files || []);
         if (files.length) attachPhotos(files, cp.photos, "callpoints", cp.id, arr => updateCallPoint(cp.id, { photos:arr }));
+      }
+      if (id === "cp-file-input") {
+        const cp = getCallPoint(state.cpId);
+        if (!cp) return;
+        const docs = Array.from(e.target.files || []);
+        if (docs.length) attachFiles(docs, cp.files, "callpoint-files", cp.id, arr => updateCallPoint(cp.id, { files:arr }));
       }
     });
 
